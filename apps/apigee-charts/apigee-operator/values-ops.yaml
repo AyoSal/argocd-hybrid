@@ -1,0 +1,37 @@
+# Override Values for Apigee Telemetry | Hybrid 1.10.3 on GKE Cluster deployed with ArgoCD and Helm
+
+gcp:
+  region: us-east1
+  projectID: ayos-os-test
+
+k8sCluster:
+  name: argocd-1103
+  region: us-east4 # Must be the closest Google Cloud region to your cluster.
+org: ayos-os-test
+orgscopedUDCA: true
+instanceID: "argocd-helm1102"
+
+imagePullSecrets:
+  - name: gcr-cred
+
+nodeSelector:
+ # This flag determines if the scheduling passes/fails if the labels are missing.
+ requiredForScheduling: true
+ apigeeRuntime:
+   key: "cloud.google.com/gke-nodepool"
+   value: "apigee-runtime"
+ apigeeData:
+   key: "cloud.google.com/gke-nodepool"
+   value: "apigee-data"
+
+hub: gcr.io/apigee-release/hybrid
+metrics:
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"
+  hostNetwork: true
+
+logger:
+  enabled: false
+        # Set to false to disable logger for GKE installations.
+        # Set to true for all platforms other than GKE.
+        # See apigee-logger in Service accounts and roles used by hybrid components.
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"

@@ -11,6 +11,9 @@ spec:
     path: apps/apigee-charts/apigee-operator
     repoURL: 'git@github.com:AyoSal/argocd-hybrid.git'
     targetRevision: HEAD
+    helm:
+      valueFiles:
+        - values-ops.yaml
   destination:
     namespace: apigee-system
     server: https://kubernetes.default.svc
