@@ -39,3 +39,6 @@ watcher:
 
 udca:
   serviceAccountRef: "hybrid-secret-for-serviceaccount"    
+ 
+mart:
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"    
