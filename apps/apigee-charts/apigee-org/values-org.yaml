@@ -42,3 +42,6 @@ udca:
  
 mart:
   serviceAccountRef: "hybrid-secret-for-serviceaccount"    
+
+connectAgent:
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"    
