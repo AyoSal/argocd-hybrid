@@ -13,7 +13,7 @@ spec:
     targetRevision: HEAD
     helm:
       valueFiles:
-        - values-ds.yaml
+      - values-ds.yaml
   destination:
     namespace: apigee
     server: https://kubernetes.default.svc
