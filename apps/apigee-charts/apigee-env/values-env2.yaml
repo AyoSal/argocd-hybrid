@@ -26,7 +26,7 @@ nodeSelector:
 
 hub: gcr.io/apigee-release/hybrid
 envs:
-- name: argocd-env
+- name: argocd-env2
   serviceAccountSecretRefs:
     synchronizer: "hybrid-secret-for-serviceaccount"
     udca: "hybrid-secret-for-serviceaccount"
