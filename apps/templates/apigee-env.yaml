@@ -17,8 +17,8 @@ spec:
       valueFiles:
       - values-env1.yaml
       parameters:
-        - name: env
-          value: argocd-env
+      - name: env
+        value: argocd-env
   destination:
     namespace: apigee
     server: https://kubernetes.default.svc
