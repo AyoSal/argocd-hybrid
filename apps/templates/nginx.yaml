@@ -10,6 +10,7 @@ spec:
   source:
     path: ''
     repoURL: 'https://charts.mirantis.com'
+    chart: nginx  
     targetRevision: v0.1.0
   destination:
     namespace: apigee
