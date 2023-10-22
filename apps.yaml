@@ -8,7 +8,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: git@github.com:AyoSal/argocd-helming.git
+    repoURL: git@github.com:AyoSal/argocd-hybrid.git
     targetRevision: HEAD
     path: apps
   destination:
