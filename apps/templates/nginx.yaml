@@ -16,12 +16,12 @@ spec:
         parameters:
           - name: replicaCount
             value: '3'
-              #  - repoURL: 'git@github.com:AyoSal/argocd-hybrid.git'
-              #   path: apps/apigee-charts/nginx
-              #  targetRevision: HEAD  
-              #  helm:
-              #  valueFiles:
-              #  - values-nginx.yaml
+    - repoURL: 'git@github.com:AyoSal/argocd-hybrid.git'
+      path: apps/apigee-charts/nginx
+      targetRevision: HEAD  
+      helm:
+        valueFiles:
+        - values-nginx.yaml
   destination:
     namespace: apigee
     server: https://kubernetes.default.svc
