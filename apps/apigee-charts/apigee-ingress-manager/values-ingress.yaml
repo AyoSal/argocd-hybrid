@@ -31,7 +31,7 @@ apigeeIngressGateway:
     tag: "1.17.2-asm.8-distroless" 
     pullPolicy: IfNotPresent  
 istiod:
- replicaCountMax: 2
+ replicaCountMax: 4
  replicaCountMin: 2
 
    
