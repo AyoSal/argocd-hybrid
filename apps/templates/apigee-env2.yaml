@@ -16,6 +16,9 @@ spec:
     helm:
       valueFiles:
       - values-env2.yaml
+      parameters:  
+      - name: env
+        value: argocd-env2
   destination:
     namespace: apigee
     server: https://kubernetes.default.svc
