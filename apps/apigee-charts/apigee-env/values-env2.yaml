@@ -38,8 +38,8 @@ synchronizer:
   replicaCountMax: 2
  
 runtime:
-  replicaCountMin: 1
-  replicaCountMax: 2
+  replicaCountMin: 8
+  replicaCountMax: 10
 
 udca:
   serviceAccountRef: "hybrid-secret-for-serviceaccount"
