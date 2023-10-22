@@ -34,4 +34,5 @@ istiod:
  replicaCountMax: 2
  replicaCountMin: 2
 
-   
+watcher:
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"   
