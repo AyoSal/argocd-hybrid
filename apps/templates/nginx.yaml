@@ -1,5 +1,4 @@
 apiVersion: argoproj.io/v1alpha1
-  #test  
 kind: Application
 metadata:
   name: nginx
@@ -9,9 +8,9 @@ metadata:
 spec:
   project: default
   source:
-    path: nginx
-    repoURL: oci://registry-1.docker.io/bitnamicharts
-    targetRevision: HEAD
+    path: ''
+    repoURL: 'https://charts.mirantis.com'
+    targetRevision: v0.1.0
   destination:
     namespace: apigee
     server: https://kubernetes.default.svc
