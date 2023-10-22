@@ -1,0 +1,11 @@
+{{- if .Values.cassandra.restore.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: apigee-cassandra-restore-sa
+  namespace: {{ include "namespace" . }}
+  {{- if .Values.gcp.workloadIdentity.enabled }}
+  annotations:
+    iam.gke.io/gcp-service-account: {{ default .Values.gcp.workloadIdentity.gsa .Values.cassandra.restore.gsa }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,13 @@
+{{- $metricsName := "apigee-metrics" -}}
+{{- if .Values.gcp.workloadIdentity.enabled  -}}
+{{- if .Values.metrics.enabled -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $metricsName }}-sa
+  namespace: {{ include "namespace" . }}
+  annotations:
+    iam.gke.io/gcp-service-account: {{ default .Values.gcp.workloadIdentity.gsa .Values.metrics.gsa }}
+---
+{{- end }}
+{{- end }}

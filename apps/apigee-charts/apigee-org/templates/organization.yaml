@@ -1,0 +1,502 @@
+{{- $datastoreName := "default" -}}
+{{- $apigeeRedisName := "default" -}}
+{{- $martName := "apigee-mart" -}}
+{{- $connectAgentName := "apigee-connect-agent" -}}
+{{- $udcaName := "apigee-udca" -}}
+{{- $mintTaskScheduler := "apigee-mint-task-scheduler" -}}
+{{- $udcaTlsReadinessName := "apigee-tls-readiness" -}}
+{{- $fluentdName := "apigee-fluentd" -}}
+{{- $watcherName := "apigee-watcher" -}}
+{{- $schemaReadinessName := "apigee-cassandra-schema-readiness" -}}
+{{- $cassandraReadinessName := "apigee-cassandra-readiness" -}}
+{{- $cassandraUserSetupName := "apigee-cassandra-user-setup" -}}
+{{- $cassandraUserReadinessName := "apigee-cassandra-user-readiness" -}}
+{{- $cassandraSchemaSetupName := "apigee-cassandra-schema-setup" -}}
+{{- $cassandraSchemaValidationName := "apigee-cassandra-schema-val" -}}
+{{- $wiAnnotation := "apigee.cloud.google.com/wi-config-checksum" -}}
+{{- $saAnnotation := "apigee.cloud.google.com/sa-config-checksum" -}}
+{{- $generatedName := include "orgScopeEncodedName" (dict "name" .Values.org) -}}
+apiVersion: apigee.cloud.google.com/v1alpha2
+kind: ApigeeOrganization
+metadata:
+  name: "{{ $generatedName }}"
+  namespace: {{ include "namespace" . }}
+  labels:
+    apigee.cloud.google.com/platform: apigee
+release:
+  forceUpdate: true
+spec:
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  name: {{ quote .Values.org }}
+  datastoreRef: "{{ $datastoreName }}"
+  dataEncryptionRef: "{{ $generatedName }}-data-encryption"
+  redisRef: "{{ $apigeeRedisName }}"
+  {{- if .Values.axHashSaltSecret }}
+  axHashingSaltRef: "{{ .Values.aXHashSaltSecret }}"
+  {{- else }}
+  axHashingSaltRef: "{{ $generatedName }}-ax-salt"
+  {{- end }}
+  apigeeEndpoint: "{{ .Values.contractProvider}}"
+  apigeeConnectEndpoint: "{{ .Values.connectAgent.server }}"
+  instanceID: {{ include "validateInstanceID" (dict "s" (required "instanceID is required" .Values.instanceID)) | quote }}
+  version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+  clusterName: "{{ .Values.k8sCluster.name }}"
+  clusterRegion: "{{ .Values.k8sCluster.region }}"
+  gcpProjectID: "{{ .Values.gcp.projectID }}"
+  {{- if .Values.httpProxy }}
+  httpForwardProxy:
+    scheme: {{ upper (required "httpProxy.scheme is required. Supported value is http or https." .Values.httpProxy.scheme) }}
+    host: {{ (required "httpProxy.host is required." .Values.httpProxy.host) }}
+    port: {{ .Values.httpProxy.port }}
+    {{- if .Values.httpProxy.username }}
+    username: {{ quote .Values.httpProxy.username }}
+    {{- end -}}
+    {{- if .Values.httpProxy.password }}
+    password: {{ quote .Values.httpProxy.password }}
+    {{- end -}}
+  {{- end }}
+  {{- with .Values.cassandra.restore.enabled }}
+  enabledCassandraSchemaSetup: false
+  {{- end }}
+  udcaEnabled: {{ .Values.orgScopedUDCA }}
+  components:
+    cassandraUserSetup:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.apigeeUserID }}
+        runAsGroup: {{ .Values.apigeeGroupID }}
+        privileged: true
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6}}
+      {{- end }}
+      {{- with .Values.cassandraUserSetup.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.cassandraUserSetup.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      initContainers:
+      - name: "{{ $cassandraReadinessName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.cassandra.auth "n" "apigee-hybrid-cassandra-client") }}
+        imagePullPolicy: {{ .Values.cassandra.auth.image.pullPolicy }}
+      containers:
+      - name: "{{ $cassandraUserSetupName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.cassandra.auth "n" "apigee-hybrid-cassandra-client") }}
+        imagePullPolicy: {{ .Values.cassandra.auth.image.pullPolicy }}
+    cassandraSchemaSetup:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.apigeeUserID }}
+        runAsGroup: {{ .Values.apigeeGroupID }}
+        privileged: false
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6 }}
+      {{- end }}
+      {{- with .Values.cassandraSchemaSetup.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.cassandraSchemaSetup.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      initContainers:
+      - name: "{{ $cassandraUserReadinessName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.cassandra.auth "n" "apigee-hybrid-cassandra-client") }}
+        imagePullPolicy: {{ .Values.cassandra.auth.image.pullPolicy }}
+      containers:
+      - name: "{{ $cassandraSchemaSetupName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.mart "n" "apigee-mart-server") }}
+        imagePullPolicy: {{ .Values.mart.image.pullPolicy }}
+    connectAgent:
+      {{- if .Values.gcp.workloadIdentity.enabled }}
+      podServiceAccountName: {{ $connectAgentName }}-{{ $generatedName }}-sa
+      {{- else}}
+      {{- if .Values.connectAgent.serviceAccountRef }}
+      appServiceAccountSecretName: "{{ .Values.connectAgent.serviceAccountRef }}"
+      {{- else }}
+      appServiceAccountSecretName: "{{ $connectAgentName }}-{{ $generatedName }}-svc-account"
+      {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6}}
+      {{- end }}
+      {{- with .Values.connectAgent.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- if .Values.connectAgent.serviceAccountPath }}
+        {{ $saAnnotation }}: {{ .Files.Get ( required "connectAgent.serviceAccountPath is required!!" .Values.connectAgent.serviceAccountPath) | sha256sum }}
+        {{- end -}}
+        {{- with .Values.connectAgent.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      {{- with .Values.connectAgent.hostNetwork }}
+      hostNetwork: {{ . }}
+      {{- end }}
+      autoScaler:
+        minReplicas: {{ .Values.connectAgent.replicaCountMin }}
+        maxReplicas: {{ .Values.connectAgent.replicaCountMax }}
+        metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: "Utilization"
+              averageUtilization: {{ .Values.connectAgent.targetCPUUtilizationPercentage }}
+      containers:
+      - name: "{{ $connectAgentName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.connectAgent "n" "apigee-connect-agent") }}
+        imagePullPolicy: {{ .Values.connectAgent.image.pullPolicy }}
+        {{- with .Values.connectAgent.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        env:
+        - name: GRPC_GO_LOG_SEVERITY_LEVEL
+          value: "{{ .Values.connectAgent.logLevel }}"
+        - name: LOG_VERBOSITY_LEVEL
+          value: "{{ .Values.connectAgent.logVerbosity }}"
+    cassandraSchemaValidation:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.apigeeUserID }}
+        runAsGroup: {{ .Values.apigeeGroupID }}
+        privileged: false
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6}}
+      {{- end }}
+      {{- with .Values.cassandraSchemaValidation.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.cassandraSchemaValidation.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      initContainers:
+      - name: "{{ $cassandraUserReadinessName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.cassandra.auth "n" "apigee-hybrid-cassandra-client") }}
+        imagePullPolicy: {{ .Values.cassandra.auth.image.pullPolicy }}
+      containers:
+      - name: "{{ $cassandraSchemaValidationName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.mart "n" "apigee-mart-server") }}
+        imagePullPolicy: {{ .Values.mart.image.pullPolicy }}
+    watcher:
+      {{- if .Values.gcp.workloadIdentity.enabled }}
+      podServiceAccountName: {{ $watcherName }}-{{ $generatedName }}-sa
+      {{- else }}
+      {{- if .Values.watcher.serviceAccountRef }}
+      appServiceAccountSecretName: "{{ .Values.watcher.serviceAccountRef }}"
+      {{- else }}
+      appServiceAccountSecretName: "{{ $watcherName }}-{{ $generatedName }}-svc-account"
+      {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6}}
+      {{- end }}
+      {{- with .Values.watcher.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- if and (not .Values.gcp.workloadIdentity.enabled) (.Values.watcher.serviceAccountPath) }}
+        {{ $saAnnotation }}: {{ .Files.Get ( required "watcher.serviceAccountPath is required!!" .Values.watcher.serviceAccountPath) | sha256sum }}
+        {{- end }}
+        {{- with .Values.watcher.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      {{- with .Values.watcher.hostNetwork }}
+      hostNetwork: {{ . }}
+      {{- end }}
+      autoScaler:
+        minReplicas: {{ .Values.watcher.replicaCountMin }}
+        maxReplicas: {{ .Values.watcher.replicaCountMax }}
+        metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: "Utilization"
+              averageUtilization: {{ .Values.watcher.targetCPUUtilizationPercentage }}
+      containers:
+      - name: "{{ $watcherName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.watcher "n" "apigee-watcher") }}
+        imagePullPolicy: {{ .Values.watcher.image.pullPolicy }}
+      properties:
+        enableIssueScanning: {{ .Values.watcher.args.enableIssueScanning }}
+        issueScanInterval: {{ .Values.watcher.args.issueScanInterval }}
+    mart:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.apigeeUserID }}
+        runAsGroup: {{ .Values.apigeeGroupID }}
+        privileged: false
+      {{- if  .Values.gcp.workloadIdentity.enabled }}
+      podServiceAccountName: {{ $martName }}-{{ $generatedName }}-sa
+      {{- else }}
+      {{- if .Values.mart.serviceAccountRef }}
+      appServiceAccountSecretName: "{{ .Values.mart.serviceAccountRef }}"
+      {{- else }}
+      appServiceAccountSecretName: "{{ $martName }}-{{ $generatedName }}-svc-account"
+      {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6}}
+      {{- end }}
+      {{- with .Values.mart.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- if .Values.mart.serviceAccountPath }}
+        {{ $saAnnotation }}: {{ .Files.Get ( required "mart.serviceAccountPath is required!!" .Values.mart.serviceAccountPath) | sha256sum }}
+        {{- end -}}
+        {{- with .Values.mart.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      {{- with .Values.mart.hostNetwork }}
+      hostNetwork: {{ . }}
+      {{- end }}
+      autoScaler:
+        minReplicas: {{ .Values.mart.replicaCountMin }}
+        maxReplicas: {{ .Values.mart.replicaCountMax }}
+        metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: "Utilization"
+              averageUtilization: {{ .Values.mart.targetCPUUtilizationPercentage }}
+      {{- with .Values.mart.cwcAppend }}
+      configOverride:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+      - name: {{ $schemaReadinessName }}
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.mart "n" "apigee-mart-server") }}
+        imagePullPolicy: {{ .Values.mart.image.pullPolicy }}
+      containers:
+      - name: "{{ $martName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.mart "n" "apigee-mart-server") }}
+        imagePullPolicy: {{ .Values.mart.image.pullPolicy }}
+        {{- with .Values.mart.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.mart.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.mart.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        env:
+        - name: {{ printf "%s_KMS_ENCRYPTION_KEY" (include "hyphenToUnderscoreUpper" (dict "s" .Values.org)) }}
+          valueFrom:
+            secretKeyRef:
+              {{- with .Values.kmsEncryptionSecret }}
+              name: "{{ .Values.kmsEncryptionSecret.Name }}"
+              key: "{{ .Values.kmsEncryptionSecret.Key }}"
+              {{- else }}
+              name: "{{ $generatedName }}-encryption-keys"
+              key: kmsEncryptionKey
+              {{- end }}
+        - name: {{ printf "%s_KVM_ENCRYPTION_KEY" (include "hyphenToUnderscoreUpper" (dict "s" .Values.org)) }}
+          valueFrom:
+            secretKeyRef:
+              {{- if .KVMEncryptionSecret }}
+              name: {{ .KVMEncryptionSecret.name }}
+              key: {{ .KVMEncryptionSecret.key }}
+              {{- else }}
+              name: "{{ $generatedName }}-encryption-keys"
+              key: kvmEncryptionKey
+              {{- end }}
+    mintTaskScheduler:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.apigeeUserID }}
+        runAsGroup: {{ .Values.apigeeGroupID }}
+        privileged: false
+      {{- with .Values.gcp.workloadIdentity.enabled }}
+      podServiceAccountName: {{$mintTaskScheduler}}-{{ $generatedName }}-sa
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6}}
+      {{- end }}
+      {{- with .Values.mintTaskScheduler.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mintTaskScheduler.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      {{- with .Values.mintTaskScheduler.cwcAppend }}
+      configOverride:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+      - name: {{$schemaReadinessName}}
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.mart "n" "apigee-mart-server") }}
+        imagePullPolicy: {{ .Values.mart.image.pullPolicy }}
+      containers:
+      - name: "{{ $mintTaskScheduler }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.mintTaskScheduler "n" "apigee-mint-task-scheduler") }}
+        imagePullPolicy: {{ .Values.mintTaskScheduler.image.pullPolicy }}
+        {{- with .Values.mintTaskScheduler.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        env:
+        - name: {{ printf "%s_KMS_ENCRYPTION_KEY" (include "hyphenToUnderscoreUpper" (dict "s" .Values.org)) }}
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.KMSEncryptionSecret }}
+              name: "{{ .Values.KMSEncryptionSecret.name }}"
+              key: "{{ .Values.KMSEncryptionSecret.key }}"
+              {{- else }}
+              name: "{{ $generatedName }}-encryption-keys"
+              key: kmsEncryptionKey
+              {{- end }}
+    udca:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.apigeeUserID }}
+        runAsGroup: {{ .Values.apigeeGroupID }}
+        privileged: false
+      {{- if .Values.gcp.workloadIdentity.enabled }}
+      podServiceAccountName: {{ $udcaName }}-{{ $generatedName }}-sa
+      {{- else }}
+      {{- if .Values.udca.serviceAccountRef }}
+      appServiceAccountSecretName: "{{ .Values.udca.serviceAccountRef }}"
+      {{- else }}
+      appServiceAccountSecretName: "{{ $udcaName }}-{{ $generatedName }}-svc-account"
+      {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6}}
+      {{- end }}
+      {{- with .Values.udca.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- if .Values.udca.serviceAccountPath }}
+        {{ $saAnnotation }}: {{ .Files.Get ( required "udca.serviceAccountPath is required!!" .Values.udca.serviceAccountPath) | sha256sum }}
+        {{- end -}}
+        {{- with .Values.udca.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      {{- with .Values.udca.hostNetwork }}
+      hostNetwork: {{ . }}
+      {{- end }}
+      autoScaler:
+        minReplicas: {{ .Values.udca.replicaCountMin }}
+        maxReplicas: {{ .Values.udca.replicaCountMax }}
+        metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: "Utilization"
+              averageUtilization: {{ .Values.udca.targetCPUUtilizationPercentage }}
+      initContainers:
+      - name: {{ $udcaTlsReadinessName }}
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.udca "n" "apigee-udca") }}
+        imagePullPolicy: {{ .Values.udca.image.pullPolicy }}
+      containers:
+      - name: {{ $udcaName }}
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.udca "n" "apigee-udca") }}
+        imagePullPolicy: {{ .Values.udca.image.pullPolicy }}
+        {{- with .Values.udca.env }}
+        env:
+        {{- range $k, $v := . }}
+        - name: "{{ $k }}"
+          value: "{{ $v }}"
+        {{- end }}
+        {{- end }}
+        {{- with .Values.udca.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.udca.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.udca.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      - name: {{ quote $fluentdName }}
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.udca.fluentd "n" "apigee-stackdriver-logging-agent") }}
+        imagePullPolicy: {{ .Values.udca.fluentd.image.pullPolicy }}
+        {{- with .Values.udca.fluentd.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+    ingressGateways:
+    {{- $version := include "validateVersion" (dict "version" .Chart.AppVersion) | quote -}}
+    {{- $apigeeUserID := .Values.apigeeUserID -}}
+    {{- $apigeeGroupID := .Values.apigeeGroupID -}}
+    {{- $nodeSelector := .Values.nodeSelector -}}
+    {{- $tolerations := .Values.apigeeIngressGateway.tolerations -}}
+    {{- $affinity := .Values.affinity -}}
+    {{- $image := include "container.image" (dict "hub" .Values.hub "o" .Values.apigeeIngressGateway "n" "apigee-asm-ingress") -}}
+    {{- $imagePullPolicy := .Values.apigeeIngressGateway.image.pullPolicy -}}
+    {{- $replicaCountMin := .Values.apigeeIngressGateway.replicaCountMin -}}
+    {{- $replicaCountMax := .Values.apigeeIngressGateway.replicaCountMax -}}
+    {{- range $i, $g := .Values.ingressGateways }}
+    - name: {{ quote $g.name }}
+      version: {{ $version }}
+      serviceSpec:
+        {{- with $g.svcAnnotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with $g.svcLoadBalancerIP }}
+        loadBalancerIP: {{ $g.svcLoadBalancerIP }}
+        {{- end }}
+        {{- with $g.svcType }}
+        type: {{ $g.svcType }}
+        {{- end }}
+      autoScaler:
+        minReplicas: {{ default $replicaCountMin $g.replicaCountMin}}
+        maxReplicas: {{ default $replicaCountMax $g.replicaCountMax}}
+      containers:
+      - name: "apigee-ingressgateway"
+        image: {{ $image }}
+        imagePullPolicy: {{ $imagePullPolicy }}
+        {{- with $g.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $apigeeUserID }}
+        runAsGroup: {{ $apigeeGroupID }}
+        privileged: false
+      {{- with $nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6}}
+      {{- end }}
+      {{- with $tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+---

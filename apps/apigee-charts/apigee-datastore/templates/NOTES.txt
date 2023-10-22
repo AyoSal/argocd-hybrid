@@ -1,0 +1,16 @@
+{{- if and .Values.gcp.workloadIdentity .Values.gcp.workloadIdentity.enabled }}
+  {{- if .Values.cassandra.backup.enabled }}
+  For C* backup GKE Workload Identity, please make sure to add the below membership to the IAM policy binding using the respective kubernetes SA (KSA).
+  gcloud iam service-accounts add-iam-policy-binding {{ default .Values.gcp.workloadIdentity.gsa .Values.cassandra.backup.gsa }} \
+        --role roles/iam.workloadIdentityUser \
+        --member "serviceAccount:{{ .Values.org }}.svc.id.goog[{{ .Values.namespace}}/apigee-cassandra-backup-sa]" \
+        --project {{ .Values.org }}
+  {{- end }}
+  {{ if .Values.cassandra.restore.enabled }}
+  For C* restore GKE Workload Identity, please make sure to add the below membership to the IAM policy binding using the respective kubernetes SA (KSA).
+  gcloud iam service-accounts add-iam-policy-binding {{ default .Values.gcp.workloadIdentity.gsa .Values.cassandra.restore.gsa }} \
+        --role roles/iam.workloadIdentityUser \
+        --member "serviceAccount:{{ .Values.org }}.svc.id.goog[{{ .Values.namespace}}/apigee-cassandra-restore-sa]" \
+        --project {{ .Values.org }}
+  {{- end -}}
+{{- end }}

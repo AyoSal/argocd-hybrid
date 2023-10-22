@@ -1,0 +1,254 @@
+{{- $telemetryName := "apigee-telemetry" -}}
+{{- $metricsName := "apigee-metrics" -}}
+{{- $prometheusAppName := "apigee-prometheus-app" -}}
+{{- $prometheusProxyName := "apigee-prometheus-proxy" -}}
+{{- $prometheusAdapterName := "apigee-prometheus-adapter" -}}
+{{- $prometheusAgg := "apigee-prometheus-agg" -}}
+{{- $sdExporterName := "apigee-stackdriver-exporter" -}}
+{{- $fluentdLoggerName := "apigee-logger" -}}
+{{- $loggerSAName := "apigee-logger-apigee-telemetry" -}}
+{{- $wiAnnotation := "apigee.cloud.google.com/wi-config-checksum" -}}
+{{- $saAnnotation := "apigee.cloud.google.com/sa-config-checksum" -}}
+{{- $generatedName := include "orgScopeEncodedName" (dict "name" .Values.org) -}}
+kind: ApigeeTelemetry
+apiVersion: apigee.cloud.google.com/v1alpha2
+metadata:
+  {{- if .Values.multiOrgCluster }}
+  name: "{{ $generatedName }}"
+  {{- else }}
+  name: "{{ $telemetryName }}"
+  {{- end }}
+  namespace: {{ include "namespace" . }}
+  labels:
+    apigee.cloud.google.com/platform: apigee
+release:
+  forceUpdate: true
+spec:
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  clusterName: "{{ .Values.k8sCluster.name }}"
+  clusterRegion: "{{ .Values.k8sCluster.region }}"
+  gcpProjectID: "{{ .Values.gcp.projectID }}"
+  organizationName: "{{ .Values.org }}"
+  {{- if .Values.httpProxy }}
+  httpForwardProxy:
+    scheme: {{ upper (required "httpProxy.scheme is required. Supported value is http or https." .Values.httpProxy.scheme) }}
+    host: {{ (required "httpProxy.host is required." .Values.httpProxy.host) }}
+    port: {{ .Values.httpProxy.port }}
+    {{- if .Values.httpProxy.username }}
+    username: {{ quote .Values.httpProxy.username }}
+    {{- end -}}
+    {{- if .Values.httpProxy.password }}
+    password: {{ quote .Values.httpProxy.password }}
+    {{- end -}}
+  {{- end }}
+  metricsExport:
+    enabled: {{ .Values.metrics.enabled }}
+    defaultMetricsProjectID: "{{ .Values.gcp.projectID }}"
+    appMetricsProjectID: "{{ .Values.gcp.projectID }}"
+    proxyMetricsProjectID: "{{ .Values.gcp.projectID }}"
+    stackdriverAPIEndpoint: "{{ .Values.metrics.sdSidecar.stackdriverApiAddress }}"
+  containerLogsExport:
+    enabled: {{ .Values.logger.enabled }}
+    projectID: "{{ .Values.gcp.projectID }}"
+  accessLogsExport:
+    enabled: false
+  {{- if or .Values.metrics.enabled .Values.logger.enabled }}
+  components:
+    {{- if .Values.metrics.enabled }}
+    metricsApp:
+      {{- if .Values.gcp.workloadIdentity.enabled }}
+      podServiceAccountName: "{{ $metricsName }}-sa"
+      {{- else }}
+      {{- if .Values.metrics.serviceAccountRef }}
+      appServiceAccountSecretName: "{{ .Values.metrics.serviceAccountRef }}"
+      {{- else }}
+      appServiceAccountSecretName: "{{ $metricsName }}-svc-account"
+      {{- end -}}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6 }}
+      {{- end }}
+      {{- with .Values.metrics.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- if .Values.metrics.serviceAccountPath }}
+        {{ $saAnnotation }}: {{ .Files.Get ( required "metrics.serviceAccountPath is required!!" .Values.metrics.serviceAccountPath) | sha256sum }}
+        {{- end -}}
+        {{- with .Values.metrics.appStackdriverExporter.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      containers:
+      - name: "{{ $prometheusAppName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.metrics.prometheus "n" "apigee-prom-prometheus") }}
+        imagePullPolicy: {{ .Values.metrics.prometheus.image.pullPolicy }}
+        {{- with .Values.metrics.appStackdriverExporter.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.metrics.prometheus.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.metrics.prometheus.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      - name: "{{ $sdExporterName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.metrics.sdSidecar "n" "apigee-stackdriver-prometheus-sidecar") }}
+        imagePullPolicy: {{ .Values.metrics.sdSidecar.image.pullPolicy }}
+        {{- with .Values.metrics.appStackdriverExporter.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+    metricsProxy:
+      {{- if .Values.gcp.workloadIdentity.enabled }}
+      podServiceAccountName: "{{ $metricsName }}-sa"
+      {{- else }}
+      {{- if .Values.metrics.serviceAccountRef }}
+      appServiceAccountSecretName: "{{ .Values.metrics.serviceAccountRef }}"
+      {{- else }}
+      appServiceAccountSecretName: "{{ $metricsName }}-svc-account"
+      {{- end -}}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6 }}
+      {{- end }}
+      {{- with .Values.metrics.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- if .Values.metrics.serviceAccountPath }}
+        {{ $saAnnotation }}: {{ .Files.Get ( required "metrics.serviceAccountPath is required!!" .Values.metrics.serviceAccountPath) | sha256sum }}
+        {{- end -}}
+        {{- with .Values.metrics.proxyStackdriverExporter.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      containers:
+      - name: "{{ $sdExporterName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.metrics.sdSidecar "n" "apigee-stackdriver-prometheus-sidecar") }}
+        imagePullPolicy: {{ .Values.metrics.sdSidecar.image.pullPolicy }}
+        {{- with .Values.metrics.proxyStackdriverExporter.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      - name: "{{ $prometheusProxyName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.metrics.prometheus "n" "apigee-prom-prometheus") }}
+        imagePullPolicy: {{ .Values.metrics.prometheus.image.pullPolicy }}
+        {{- with .Values.metrics.proxyStackdriverExporter.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      - name: "{{ $prometheusAgg }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.metrics.prometheus "n" "apigee-prom-prometheus") }}
+        imagePullPolicy: {{ .Values.metrics.prometheus.image.pullPolicy }}
+        {{- with .Values.metrics.appStackdriverExporter.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+    metricsAdapter:
+      {{- if .Values.gcp.workloadIdentity.enabled }}
+      podServiceAccountName: "{{ $metricsName }}-sa"
+      {{- else }}
+      {{- if .Values.metrics.adapter.serviceAccountRef }}
+      appServiceAccountSecretName: "{{ .Values.metrics.adapter.serviceAccountRef }}"
+      {{- else }}
+      appServiceAccountSecretName: "{{ $metricsName }}-svc-account"
+      {{- end -}}
+      {{- end -}}
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6 }}
+      {{- end }}
+      {{- with .Values.metrics.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- if .Values.metrics.serviceAccountPath }}
+        {{ $saAnnotation }}: {{ .Files.Get ( required "metrics.serviceAccountPath is required!!" .Values.metrics.serviceAccountPath) | sha256sum }}
+        {{- end -}}
+        {{- with .Values.metrics.adapter.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      {{- with .Values.metrics.hostNetwork }}
+      hostNetwork: {{ . }}
+      {{- end }}
+      containers:
+      - name: "{{ $prometheusAdapterName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.metrics.adapter "n" "apigee-prometheus-adapter") }}
+        imagePullPolicy: {{ .Values.metrics.adapter.image.pullPolicy }}
+        {{- with .Values.metrics.adapter.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.metrics.adapter.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end -}}
+        {{- with .Values.metrics.adapter.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end -}}
+    {{- end -}}
+    {{- if .Values.logger.enabled }}
+    containerLogs:
+      {{- if .Values.gcp.workloadIdentity.enabled }}
+      podServiceAccountName: {{ $loggerSAName }}
+      {{- else }}
+      {{- if .Values.logger.serviceAccountRef }}
+      appServiceAccountSecretName: "{{ .Values.logger.serviceAccountRef }}"
+      {{- else }}
+      appServiceAccountSecretName: "{{ $fluentdLoggerName }}-svc-account"
+      {{- end -}}
+      {{- end -}}
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.both" . | nindent 6}}
+      {{- end }}
+      {{- with .Values.logger.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- if .Values.logger.serviceAccountPath }}
+        {{ $saAnnotation }}: {{ .Files.Get ( required "logger.serviceAccountPath is required!!" .Values.logger.serviceAccountPath) | sha256sum }}
+        {{- end -}}
+        {{- with .Values.logger.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      {{- with .Values.logger.hostNetwork }}
+      hostNetwork: {{ . }}
+      {{- end }}
+      containers:
+      - name: "{{ $fluentdLoggerName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.logger "n" "apigee-fluent-bit") }}
+        imagePullPolicy: {{ .Values.logger.image.pullPolicy }}
+        {{- if and .Values.logger .Values.logger.envVars }}
+        env:
+        {{- range $k, $v := .Values.logger.envVars }}
+        - name: "{{ $k }}"
+          value: "{{ $v }}"
+        {{- end }}
+        {{- end }}
+        {{- with .Values.logger.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.logger.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.logger.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end -}}
+    {{- end -}}
+  {{- end -}}

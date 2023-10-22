@@ -1,0 +1,220 @@
+{{- $name := "default" }}
+{{- $actionbk := "apigee-cassandra-backup"}}
+{{- $actionrs := "apigee-cassandra-restore"}}
+{{- $cassServiceName := include "cassandra.svc" . }}
+{{- $secretKey := "dbbackup_key.json" }}
+{{- $removeDc := "apigee-cassandra-remove-dc" -}}
+{{- $httpProxyURL := include "http_proxy.url" . -}}
+apiVersion: apigee.cloud.google.com/v1alpha1
+kind: ApigeeDatastore
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "namespace" . }}
+  labels:
+    apigee.cloud.google.com/platform: apigee
+spec:
+  forceDelete: {{ .Values.cassandra.forceDelete }}
+  replicas: {{ .Values.cassandra.replicaCount }}
+  {{- if .Values.cassandra.auth.secretProviderClass }}
+  authSecretProviderClass: "{{ .Values.cassandra.auth.secretProviderClass }}"
+  {{- else if .Values.cassandra.auth.secret }}
+  credentialRef: "{{ .Values.cassandra.auth.secret }}"
+  {{- else }}
+  credentialRef: "apigee-datastore-{{ $name }}-creds"
+  {{- end }}
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  components:
+    cassandra:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.apigeeUserID }}
+        runAsGroup: {{ .Values.apigeeGroupID }}
+        privileged: false
+        capabilities:
+          add:
+          - IPC_LOCK
+          - SYS_RESOURCE
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.data" . | nindent 6 }}
+      {{- end }}
+      {{- with .Values.cassandra.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.cassandra.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      properties:
+        clusterName: {{ .Values.cassandra.clusterName }}
+        {{- if .Values.cassandra.externalSeedHost }}
+        externalSeedHost: {{ .Values.cassandra.externalSeedHost }}
+        {{- end }}
+        {{- if .Values.cassandra.multiRegionSeedHost }}
+        multiRegionSeedHost: {{ .Values.cassandra.multiRegionSeedHost }}
+        {{- end }}
+        datacenter: {{ .Values.cassandra.datacenter }}
+        rack: {{ .Values.cassandra.rack }}
+      {{- if .Values.cassandra.hostNetwork }}
+      hostNetwork: {{ .Values.cassandra.hostNetwork }}
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
+      {{- if .Values.cassandra.storage }}
+      storage:
+        {{-  include "cassandra.storage" (dict "storage" .Values.cassandra.storage ) | nindent 8 }}
+      {{- end }}
+      {{- with .Values.cassandra.cwcAppend }}
+      configOverride:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+      {{- if .Values.cassandra.backup.enabled }}
+      - name: {{ $actionbk }}
+        secret:
+          defaultMode: 0644
+          {{- if .Values.cassandra.backup.serviceAccountRef }}
+          secretName: "{{ .Values.cassandra.backup.serviceAccountRef }}"
+          {{- else }}
+          secretName: "{{ $actionbk }}-svc-account"
+          {{- end }}
+          optional: true
+      - name: {{ $actionbk }}-key-file
+        secret:
+          defaultMode: 0400
+          secretName: {{ $actionbk }}-key-file
+          optional: true
+      {{- end }}
+      {{- if .Values.cassandra.restore.enabled }}
+      - name: {{ $actionrs }}
+        secret:
+          defaultMode: 0644
+          {{- if .Values.cassandra.restore.serviceAccountRef }}
+          secretName: "{{ .Values.cassandra.restore.serviceAccountRef }}"
+          {{- else if .Values.cassandra.backup.serviceAccountRef }}
+          secretName: "{{ .Values.cassandra.backup.serviceAccountRef }}"
+          {{- else }}
+          secretName: "{{ $actionrs }}-svc-account"
+          {{- end }}
+          optional: true
+      - name: {{ $actionrs }}-key-file
+        secret:
+          defaultMode: 0400
+          secretName: {{ $actionrs }}-key-file
+          optional: true
+      {{- end }}
+      containers:
+      - name: "apigee-cassandra"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.cassandra "n" "apigee-hybrid-cassandra") }}
+        imagePullPolicy: {{ .Values.cassandra.image.pullPolicy }}
+        {{- with .Values.cassandra.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.cassandra.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        env:
+        - name: MAX_HEAP_SIZE
+          value: {{ .Values.cassandra.maxHeapSize }}
+        - name: HEAP_NEWSIZE
+          value: {{ .Values.cassandra.heapNewSize }}
+        {{- if not .Values.cassandra.auth.secretProviderClass }}
+        - name: CASSANDRA_DB_USER
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.cassandra.auth.secret }}
+              name: {{ .Values.cassandra.auth.secret }}
+              {{- else }}
+              name: apigee-datastore-{{ $name }}-creds
+              {{- end }}
+              key: admin.user
+        - name: CASSANDRA_DB_PASS
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.cassandra.auth.secret }}
+              name: {{ .Values.cassandra.auth.secret }}
+              {{- else }}
+              name: apigee-datastore-{{ $name }}-creds
+              {{- end }}
+              key: admin.password
+        {{- end }}
+        {{- if .Values.cassandra.backup.enabled }}
+        - name: APIGEE_CLOUDPROVIDER
+          value: "{{ .Values.cassandra.backup.cloudProvider }}"
+        {{- if .Values.cassandra.backup.dbStorageBucket }}
+        - name: DBSTORAGE_BUCKET
+          value: "{{ .Values.cassandra.backup.dbStorageBucket }}"
+        {{- end }}
+        {{- if .Values.cassandra.backup.server }}
+        - name: BACKUP_SERVER_IP
+          value: "{{ .Values.cassandra.backup.server }}"
+        {{- end }}
+        {{- if .Values.cassandra.backup.storageDirectory }}
+        - name: BACKUP_STORAGE_DIR
+          value: "{{ .Values.cassandra.backup.storageDirectory }}"
+        {{- end }}
+        {{- if or .Values.cassandra.backup.keyFile .Values.cassandra.backup.keyFileRef }}
+        - name: BACKUP_KEY_FILE
+          value: "/var/secrets/keys/key"
+        {{- end }}
+        {{- end }}
+        {{- if .Values.cassandra.restore.enabled }}
+        {{- if .Values.cassandra.restore.singleOrgRestore }}
+        - name: SINGLE_ORG_RESTORE
+          value: "true"
+        - name: ORG
+          value: {{ .Values.org }}
+        {{- end }}
+        {{- if .Values.cassandra.restore.cloudProvider }}
+        - name: APIGEE_CLOUDPROVIDER
+          value: "{{ .Values.cassandra.restore.cloudProvider }}"
+        {{- else if .Values.cassandra.backup.cloudProvider }}
+        - name: APIGEE_CLOUDPROVIDER
+          value: "{{ .Values.cassandra.backup.cloudProvider }}"
+        {{- end }}
+        {{- if .Values.cassandra.restore.dbStorageBucket }}
+        - name: DBSTORAGE_BUCKET
+          value: "{{ .Values.cassandra.restore.dbStorageBucket }}"
+        {{- else if .Values.cassandra.backup.dbStorageBucket }}
+        - name: DBSTORAGE_BUCKET
+          value: "{{ .Values.cassandra.backup.dbStorageBucket }}"
+        {{- end }}
+        {{- if .Values.cassandra.restore.server }}
+        - name: BACKUP_SERVER_IP
+          value: "{{ .Values.cassandra.restore.server }}"
+        {{- else if .Values.cassandra.backup.server }}
+        - name: BACKUP_SERVER_IP
+          value: "{{ .Values.cassandra.backup.server }}"
+        {{- end }}
+        {{- if .Values.cassandra.restore.storageDirectory }}
+        - name: BACKUP_STORAGE_DIR
+          value: "{{ .Values.cassandra.restore.storageDirectory }}"
+        {{- else if .Values.cassandra.backup.storageDirectory }}
+        - name: BACKUP_STORAGE_DIR
+          value: "{{ .Values.cassandra.backup.storageDirectory }}"
+        {{- end }}
+        {{- if or (.Values.cassandra.restore.keyFileRef) (.Values.cassandra.backup.keyFileRef) (.Values.cassandra.restore.keyFile) (.Values.cassandra.backup.keyFile) }}
+        - name: BACKUP_KEY_FILE
+          value: "/var/secrets/keys/key"
+        {{- end }}
+        {{- end }}
+        volumeMounts:
+        {{- if .Values.cassandra.backup.enabled }}
+        - name: {{ $actionbk }}
+          mountPath: /var/secrets/google
+        - name: {{ $actionbk }}-key-file
+          mountPath: /var/secrets/keys
+        {{- end }}
+        {{- if .Values.cassandra.restore.enabled }}
+        - name: {{ $actionrs }}
+          mountPath: /var/secrets/google
+        - name: {{ $actionrs }}-key-file
+          mountPath: /var/secrets/keys
+        {{- end }}
+
+

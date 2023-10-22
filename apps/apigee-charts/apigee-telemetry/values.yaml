@@ -1,0 +1,138 @@
+# Default values for apigee-telemetry.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+org: ""
+
+k8sCluster:
+  name: ""
+  region: ""
+
+gcp:
+  region: us-central1
+  projectID: ""
+  projectIDRuntime: ""
+  workloadIdentity:
+    enabled: false
+
+controllerNamespace: apigee-system
+namespace: apigee
+
+apigeeGroupID: 998
+apigeeUserID: 999
+
+nodeSelector:
+  apigeeRuntime:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-runtime"
+  apigeeData:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-data"
+
+# Hybrid container logger.
+logger:
+  enabled: false
+  terminationGracePeriodSeconds: 30
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-fluent-bit"
+    tag: "2.1.8"
+    pullPolicy: IfNotPresent
+  serviceAccountPath:
+  livenessProbe:
+    failureThreshold: 3
+    initialDelaySeconds: 0
+    periodSeconds: 60
+    successThreshold: 1
+    timeoutSeconds: 1
+  resources:
+    limits:
+      cpu: 200m
+      memory: 500Mi
+    requests:
+      cpu: 100m
+      memory: 250Mi
+  fluentd:
+    buffer_chunk_limit: 512k
+    buffer_queue_limit: 6
+    flush_interval: 5s
+    max_retry_wait: 30
+    num_threads: 2
+  nodeSelector:
+    key: "apigee.cloud.google.com/apigee-logger-enabled"
+    value: "true"
+  proxyURL:
+
+
+# Apigee Metrics.
+metrics:
+  enabled: true
+  terminationGracePeriodSeconds: 300
+  serviceAccountPath:
+  appStackdriverExporter:
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 128m
+        memory: 512Mi
+  proxyStackdriverExporter:
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 128m
+        memory: 512Mi
+  adapter:
+    image:
+      url: "gcr.io/apigee-release/hybrid/apigee-prometheus-adapter"
+      tag: "v0.11.0"
+      pullPolicy: IfNotPresent
+    serviceAccountPath:
+    containerPort: 6443
+    readinessProbe:
+      httpGet:
+        path: /healthz
+        port: 6443
+        scheme: HTTPS
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 10
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 6443
+        scheme: HTTPS
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 5
+  prometheus:
+    image:
+      url: "gcr.io/apigee-release/hybrid/apigee-prom-prometheus"
+      tag: "v2.45.0"
+      pullPolicy: IfNotPresent
+    args:
+      storage_tsdb_retention: 48h
+    containerPort: 9090
+    readinessProbe:
+      httpGet:
+        path: /-/ready
+        port: 9090
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 120
+    livenessProbe:
+      httpGet:
+        path: /-/healthy
+        port: 9090
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 6
+  sdSidecar:
+    image:
+      url: "gcr.io/apigee-release/hybrid/apigee-stackdriver-prometheus-sidecar"
+      tag: "0.9.0"
+      pullPolicy: IfNotPresent
+    containerPort: 9091
+    stackdriverApiAddress: "https://monitoring.googleapis.com:443/"
+  proxyURL:

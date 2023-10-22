@@ -1,0 +1,11 @@
+{{- if .Values.gcp.workloadIdentity.enabled }}
+{{- $watcherName := "apigee-watcher" -}}
+{{- $generatedName := include "orgScopeEncodedName" (dict "name" .Values.org) -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $watcherName }}-{{ $generatedName }}-sa
+  namespace: {{ include "namespace" . }}
+  annotations:
+    iam.gke.io/gcp-service-account: {{ default .Values.gcp.workloadIdentity.gsa .Values.watcher.gsa }}
+{{- end -}}

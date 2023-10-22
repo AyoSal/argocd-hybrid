@@ -1,0 +1,246 @@
+{{- $name := "default" }}
+{{- $actionrs := "apigee-cassandra-restore"}}
+{{- $cassServiceName := include "cassandra.svc" . }}
+{{- $secretKey := "dbbackup_key.json" }}
+{{- $httpProxyURL := include "http_proxy.url" . -}}
+{{- if .Values.cassandra.restore.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $actionrs }}
+  namespace: {{ include "namespace" . }}
+spec:
+  template:
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      affinity:
+        {{- include "nodeAffinity.runtime" . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.cassandra.restore.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.apigeeUserID }}
+        runAsGroup: {{ .Values.apigeeGroupID }}
+        {{- if .Values.cassandra.restore.keyFile }}
+        fsGroup: {{ .Values.apigeeGroupID }}
+        {{- end }}
+      serviceAccountName: {{ $actionrs }}-sa
+      initContainers:
+      - name: check-user
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.cassandra.auth "n" "apigee-hybrid-cassandra-client") }}
+        imagePullPolicy: {{ .Values.cassandra.auth.image.pullPolicy }}
+        {{- if .Values.cassandra.auth.secretProviderClass }}
+        command: [
+          'bash',
+          '-c',
+          'export CASS_USERNAME=$(<${CASSANDRA_ADMIN_USERNAME_PATH});export CASS_PASSWORD=$(<${CASSANDRA_ADMIN_PASSWORD_PATH});until cqlsh {{ $cassServiceName }} -u ${CASS_USERNAME} -p ${CASS_PASSWORD} --ssl -e "select * from system_schema.keyspaces;" &> /dev/null; do sleep 5; echo "waiting for roles to be created"; done;' ]
+        {{- else }}
+        command: [
+          'bash',
+          '-c',
+          'until cqlsh {{ $cassServiceName }} -u ${CASS_USERNAME} -p ${CASS_PASSWORD} --ssl -e "select * from system_schema.keyspaces;" &> /dev/null; do sleep 5; echo "waiting for roles to be created"; done;']
+        {{- end }}
+        env:
+        {{- if .Values.cassandra.auth.secretProviderClass }}
+        - name: CASSANDRA_ADMIN_USERNAME_PATH
+          value: /opt/apigee/externalsecrets/adminUsername
+        - name: CASSANDRA_ADMIN_PASSWORD_PATH
+          value: /opt/apigee/externalsecrets/adminPassword
+        {{- else }}
+        - name: CASS_USERNAME
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.cassandra.auth.secret }}
+              name: {{ .Values.cassandra.auth.secret }}
+              {{- else }}
+              name: apigee-datastore-{{ $name }}-creds
+              {{- end }}
+              key: admin.user
+        - name: CASS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.cassandra.auth.secret }}
+              name: {{ .Values.cassandra.auth.secret }}
+              {{- else }}
+              name: apigee-datastore-{{ $name }}-creds
+              {{- end }}
+              key: admin.password
+        {{- end }}
+        volumeMounts:
+        - name: tls-volume
+          readOnly: true
+          mountPath: /opt/apigee/ssl
+        {{- if .Values.cassandra.auth.secretProviderClass }}
+        - name: apigee-external-secrets
+          mountPath: /opt/apigee/externalsecrets
+          readOnly: true
+        {{- end }}
+      containers:
+      - name: {{ $actionrs }}
+        command:
+        - /bin/bash
+        - -c
+        - /usr/bin/RestoreDBMaster.sh
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.cassandra.restore "n" "apigee-cassandra-backup-utility") }}
+        imagePullPolicy: {{ .Values.cassandra.restore.image.pullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+        env:
+        - name: APIGEE_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CASSANDRA_CLUSTER_NAME
+          value: {{ .Values.cassandra.clusterName }}
+        - name: CASSANDRA_DC
+          value: {{ .Values.cassandra.datacenter }}
+        {{- if .Values.cassandra.restore.singleOrgRestore }}
+        - name: SINGLE_ORG_RESTORE
+          value: "true"
+        - name: ORG
+          value: {{ .Org }}
+        {{- end }}
+        - name: APIGEE_CLOUDPROVIDER
+          {{- if .Values.cassandra.restore.cloudProvider }}
+          value: "{{ .Values.cassandra.restore.cloudProvider }}"
+          {{- else }}
+          value: "{{ .Values.cassandra.backup.cloudProvider }}"
+          {{- end }}
+        - name: DBSTORAGE_BUCKET
+          {{- if .Values.cassandra.restore.dbStorageBucket }}
+          value: "{{ .Values.cassandra.restore.dbStorageBucket }}"
+          {{- else }}
+          value: "{{ .Values.cassandra.backup.dbStorageBucket }}"
+          {{- end }}
+        - name: BACKUP_SNAPSHOT_TIMESTAMP
+          value: "{{ .Values.cassandra.restore.snapshotTimestamp }}"
+        {{- if $httpProxyURL }}
+        - name: http_proxy
+          value: {{ $httpProxyURL }}
+        {{- end }}
+        {{- if .Values.cassandra.restore.server }}
+        - name: BACKUP_SERVER_IP
+          {{- if .Values.cassandra.restore.server }}
+          value: "{{ .Values.cassandra.restore.server }}"
+          {{- else }}
+          value: "{{ .Values.cassandra.backup.server }}"
+          {{- end }}
+        {{- end }}
+        {{- if .Values.cassandra.restore.storageDirectory }}
+        - name: BACKUP_STORAGE_DIR
+          {{- if .Values.cassandra.restore.storageDirectory }}
+          value: "{{ .Values.cassandra.restore.storageDirectory }}"
+          {{- else }}
+          value: "{{ .Values.cassandra.backup.storageDirectory }}"
+          {{- end }}
+        {{- end }}
+        - name: BACKUP_KEY_FILE
+          value: "/var/secrets/keys/key"
+        {{- if .Values.cassandra.auth.secretProviderClass }}
+        - name: CASSANDRA_ADMIN_USERNAME_PATH
+          value: /opt/apigee/externalsecrets/adminUsername
+        - name: CASSANDRA_ADMIN_PASSWORD_PATH
+          value: /opt/apigee/externalsecrets/adminPassword
+        {{- else }}
+        - name: CASSANDRA_DB_USER
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.cassandra.auth.secret }}
+              name: {{ .Values.cassandra.auth.secret }}
+              {{- else }}
+              name: apigee-datastore-{{ $name }}-creds
+              {{- end }}
+              key: admin.user
+        - name: CASSANDRA_DB_PASS
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.cassandra.auth.secret }}
+              name: {{ .Values.cassandra.auth.secret }}
+              {{- else }}
+              name: apigee-datastore-{{ $name }}-creds
+              {{- end }}
+              key: admin.password
+        - name: APIGEE_JMX_USER
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.cassandra.auth.secret }}
+              name: {{ .Values.cassandra.auth.secret }}
+              {{- else }}
+              name: apigee-datastore-{{ $name }}-creds
+              {{- end }}
+              key: jmx.user
+        - name: APIGEE_JMX_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.cassandra.auth.secret }}
+              name: {{ .Values.cassandra.auth.secret }}
+              {{- else }}
+              name: apigee-datastore-{{ $name }}-creds
+              {{- end }}
+              key: jmx.password
+        {{- end }}
+        volumeMounts:
+        - name: backup-data-volume
+          mountPath: /opt/apigee/data
+        - name: {{ $actionrs }}
+          mountPath: /var/secrets/google
+        - name: tls-volume
+          readOnly: true
+          mountPath: /opt/apigee/ssl
+        - name: {{ $actionrs }}-key-file
+          mountPath: /var/secrets/keys
+        {{- if .Values.cassandra.auth.secretProviderClass }}
+        - name: apigee-external-secrets
+          mountPath: /opt/apigee/externalsecrets
+          readOnly: true
+        {{- end }}
+      volumes:
+      - name: backup-data-volume
+        emptyDir:
+          sizeLimit: 10Mi
+      - name: {{ $actionrs }}
+        secret:
+          defaultMode: 0644
+          items:
+          - key: {{ $secretKey }}
+            path: {{ $secretKey }}
+          {{- if .Values.cassandra.restore.serviceAccountRef }}
+          secretName: "{{ .Values.cassandra.restore.serviceAccountRef }}"
+          {{- else }}
+          secretName: "{{ $actionrs }}-svc-account"
+          {{- end }}
+          optional: true
+      - name: {{ $actionrs }}-key-file
+        secret:
+          defaultMode: 0400
+          {{- if .Values.cassandra.restore.keyFileRef }}
+          secretName: {{ .Values.cassandra.restore.keyFileRef }}
+          {{- else }}
+          secretName: {{ $actionrs }}-key-file
+          {{- end }}
+          optional: true
+      - name: tls-volume
+        secret:
+          secretName: "{{ $actionrs }}-tls"
+      {{- if .Values.cassandra.auth.secretProviderClass }}
+      - name: apigee-external-secrets
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "{{ .Values.cassandra.auth.secretProviderClass }}"
+      {{- end }}
+      restartPolicy: OnFailure
+---
+{{- end }}

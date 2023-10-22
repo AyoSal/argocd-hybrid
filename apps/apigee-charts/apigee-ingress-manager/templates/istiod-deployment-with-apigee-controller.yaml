@@ -1,0 +1,309 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: apigee-ingressgateway-manager
+    revision: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+    apigee.cloud.google.com/platform: apigee
+  name: apigee-ingressgateway-manager
+  namespace: {{ include "namespace" . }}
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: apigee-ingressgateway-manager
+  strategy:
+    rollingUpdate:
+      maxSurge: 100%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        sidecar.istio.io/inject: "false"
+        {{- if .Values.istiod.annotations }}
+        {{- range $k, $v := .Values.istiod.annotations }}
+        {{ $k }}: "{{ $v }}"
+        {{- end }}
+        {{- end }}
+      creationTimestamp: null
+      labels:
+        apigee.cloud.google.com/platform: apigee
+        app: apigee-ingressgateway-manager
+        revision: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      affinity:
+        {{- include "nodeAffinity.runtime" . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.istiod.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - args:
+        - discovery
+        - --monitoringAddr=:15014
+        - --log_output_level=default:warn
+        - --log_as_json
+        - --domain
+        - cluster.local
+        - --keepaliveMaxServerConnectionAge
+        - 30m
+        - --tlsCertFile=/istiod-cert/tls.crt
+        - --tlsKeyFile=/istiod-cert/tls.key
+        - --caCertFile=/istiod-cert/ca.crt
+        - --configDir=/var/lib/istio/configurations
+        env:
+        - name: REVISION
+          value: default
+        - name: JWT_POLICY
+          value: third-party-jwt
+        - name: PILOT_CERT_PROVIDER
+          value: custom
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: SERVICE_ACCOUNT
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.serviceAccountName
+        - name: PILOT_TRACE_SAMPLING
+          value: "1"
+        - name: PILOT_ENABLE_PROTOCOL_SNIFFING_FOR_OUTBOUND
+          value: "false"
+        - name: PILOT_ENABLE_PROTOCOL_SNIFFING_FOR_INBOUND
+          value: "false"
+        - name: ISTIOD_ADDR
+          value: apigee-ingressgateway-manager.{{ include "namespace" . }}.svc:15012
+        - name: PILOT_ENABLE_ANALYSIS
+          value: "false"
+        - name: CLUSTER_ID
+          value: kubernetes
+        - name: XDS_AUTH
+          value: "true"
+        - name: VALIDATION_WEBHOOK_CONFIG_NAME
+        - name: PRIORITIZED_LEADER_ELECTION
+          value: "false"
+        - name: INJECTION_WEBHOOK_CONFIG_NAME
+        - name: ISTIO_WATCH_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: GOMEMLIMIT
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.memory
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.istiod "n" "apigee-asm-istiod") }}
+        imagePullPolicy: {{ .Values.istiod.image.pullPolicy }}
+        name: discovery
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        - containerPort: 15010
+          protocol: TCP
+        - containerPort: 15017
+          protocol: TCP
+        - containerPort: 15053
+          protocol: TCP
+        - containerPort: 15012
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /ready
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 1
+          periodSeconds: 3
+          successThreshold: 1
+          timeoutSeconds: 5
+        {{- with .Values.istiod.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/istio/config
+          name: config-volume
+        - mountPath: /var/run/secrets/tokens
+          name: istio-token
+          readOnly: true
+        - mountPath: /var/run/secrets/istio-dns
+          name: local-certs
+        - mountPath: /etc/cacerts
+          name: cacerts
+          readOnly: true
+        - mountPath: /var/lib/istio/inject
+          name: inject
+          readOnly: true
+        - mountPath: "/var/lib/istio/configurations"
+          name: istiod-config
+          readOnly: true
+        - mountPath: "/istiod-cert"
+          name: apigee-istiod-cert
+          readOnly: true
+      - args:
+        - --metrics-addr=127.0.0.1:8080
+        - --enable-leader-election=false
+        - --apigee-runtime-type=cloud
+        - --log-level={{ .Values.ao.args.loglevel }}
+        - --enable-webhooks=false
+        - --enable-controllers=true
+        - --disable-apigee-environment-controller=true
+        - --disable-apigee-organization-controller=true
+        - --disable-apigee-datastore-controller=true
+        - --disable-apigee-deployment-controller=true
+        - --disable-apigee-telemetry-controller=true
+        - --disable-apigee-redis-controller=true
+        - --disable-cassandra-data-replication-controller=true
+        - --disable-apigee-route-controller=true
+        - --disable-apigee-deployment-controller=true
+        - --metrics-addr=0
+        - --istio-config-dir=/var/lib/istio/configurations
+        - --apigee-service-name=production
+        - --enable-api-client={{ .Values.ao.args.enableAPIClient }}
+        - --disable-istio-config-in-apiserver=true
+        - --disable-remove-old-version-crd-status=true
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        command:
+        - /manager
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.ao "n" "apigee-operators") }}
+        imagePullPolicy: {{ .Values.ao.image.pullPolicy }}
+        name: manager
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        - containerPort: 8081
+          name: healthcheck
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 1
+          httpGet:
+            path: /readyz
+            port: healthcheck
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        {{- with .Values.ao.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: "/var/lib/istio/configurations"
+          name: istiod-config
+        - mountPath: "/envoyfilter"
+          name: envoyfilter
+          readOnly: true
+        - mountPath: "/additional-istio-config"
+          name: additional-config
+          readOnly: true
+        - mountPath: "/istiod-cert"
+          name: apigee-istiod-cert
+          readOnly: true
+      - args:
+        - --secure-listen-address=0.0.0.0:8443
+        - --upstream=http://127.0.0.1:8080/
+        - --logtostderr=true
+        - --v=10
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.kubeRBACProxy "n" "apigee-kube-rbac-proxy") }}
+        imagePullPolicy: {{ .Values.kubeRBACProxy.image.pullPolicy }}
+        name: kube-rbac-proxy
+        ports:
+        - containerPort: 8443
+          name: https
+          protocol: TCP
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.apigeeUserID }}
+        runAsGroup: {{ .Values.apigeeGroupID }}
+      serviceAccount: apigee-ingressgateway-manager
+      serviceAccountName: apigee-ingressgateway-manager
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - emptyDir:
+          medium: Memory
+        name: local-certs
+      - name: istio-token
+        projected:
+          defaultMode: 420
+          sources:
+          - serviceAccountToken:
+              expirationSeconds: 43200
+              path: istio-token
+      - name: cacerts
+        secret:
+          defaultMode: 420
+          optional: true
+          secretName: cacerts
+      - configMap:
+          defaultMode: 420
+          name: istio-sidecar-injector
+          optional: true
+        name: inject
+      - configMap:
+          defaultMode: 420
+          name: apigee-istio-mesh-config
+        name: config-volume
+      - name: istiod-config
+        emptyDir: {}
+      - name: apigee-istiod-cert
+        secret:
+          secretName: apigee-istiod-cert
+      - configMap:
+          defaultMode: 420
+          name: apigee-envoyfilters
+        name: envoyfilter
+      - configMap:
+          defaultMode: 420
+          name: apigee-additional-istio-config
+          optional: true
+        name: additional-config

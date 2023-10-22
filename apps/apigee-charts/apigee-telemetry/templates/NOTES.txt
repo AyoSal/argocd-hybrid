@@ -1,0 +1,21 @@
+{{- $loggerSAName := "apigee-logger-apigee-telemetry" -}}
+{{- $metricsKSA := "apigee-metrics-sa" -}}
+{{- if .Values.gcp.workloadIdentity.enabled  -}}
+{{- if or .Values.logger.enabled .Values.metrics.enabled -}}
+For GKE Workload Identity, please make sure to add the below membership to the IAM policy binding using the respective kubernetes SA (KSA).
+{{- if .Values.logger.enabled }}
+  Logger KSA: {{ $loggerSAName }}
+  gcloud iam service-accounts add-iam-policy-binding {{ default .Values.gcp.workloadIdentity.gsa .Values.logger.gsa }} \
+        --role roles/iam.workloadIdentityUser \
+        --member "serviceAccount:{{ .Values.org }}.svc.id.goog[{{ .Values.namespace}}/{{ $loggerSAName }}]" \
+        --project {{ .Values.org }}
+{{- end }}
+{{ if .Values.metrics.enabled }}
+  Metrics KSA: {{ $metricsKSA }}
+  gcloud iam service-accounts add-iam-policy-binding {{ default .Values.gcp.workloadIdentity.gsa .Values.metrics.gsa }} \
+        --role roles/iam.workloadIdentityUser \
+        --member "serviceAccount:{{ .Values.org }}.svc.id.goog[{{ .Values.namespace}}/{{ $metricsKSA }}]" \
+        --project {{ .Values.org }}
+{{- end }}
+{{- end }}
+{{- end }}

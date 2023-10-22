@@ -1,0 +1,6 @@
+# Default values for apigee-virtualhost.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+controllerNamespace: apigee-system
+namespace: apigee

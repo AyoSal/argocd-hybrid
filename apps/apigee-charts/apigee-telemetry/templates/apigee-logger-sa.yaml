@@ -1,0 +1,13 @@
+{{- $loggerSAName := "apigee-logger-apigee-telemetry" -}}
+{{- if .Values.gcp.workloadIdentity.enabled  -}}
+{{- if .Values.logger.enabled -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $loggerSAName }}
+  namespace: {{ include "namespace" . }}
+  annotations:
+    iam.gke.io/gcp-service-account: {{ default .Values.gcp.workloadIdentity.gsa .Values.logger.gsa }}
+---
+{{- end -}}
+{{- end }}

@@ -1,0 +1,119 @@
+{{- $name := "default" }}
+{{- $redisName := "apigee-redis" -}}
+{{- $redisEnvoyName := "apigee-redis-envoy" -}}
+apiVersion: apigee.cloud.google.com/v1alpha1
+kind: ApigeeRedis
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "namespace" . }}
+  labels:
+    apigee.cloud.google.com/platform: apigee
+release:
+  forceUpdate: true
+spec:
+  name: {{ $name }}
+  {{- if .Values.redis.auth.secret }}
+  credentialRef: {{ .Values.redis.auth.secret }}
+  {{- else }}
+  credentialRef: "{{ $redisName }}-{{ $name }}-creds"
+  {{- end -}}
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  components:
+    redis:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.apigeeUserID }}
+        runAsGroup: {{ .Values.apigeeGroupID }}
+        privileged: false
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6 }}
+      {{- end }}
+      {{- with .Values.redis.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.redis.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      {{- with .Values.redis.cwcAppend }}
+      configOverride:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      replicas: {{ .Values.redis.replicaCount }}
+      containers:
+      - name: {{ $redisName }}
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.redis "n" "apigee-redis") }}
+        imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+        {{- with .Values.redis.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.redis.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.redis.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      lifecycle:
+        postStart:
+          exec:
+            command:
+            - /app/redis-prober
+            - --skip_tls_verify=true
+    redisEnvoy:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.apigeeUserID }}
+        runAsGroup: {{ .Values.apigeeGroupID }}
+        privileged: false
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      autoScaler:
+        minReplicas: {{ .Values.redis.envoy.replicaCountMin }}
+        maxReplicas: {{ .Values.redis.envoy.replicaCountMax }}
+        metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            targetAverageUtilization: {{ .Values.redis.envoy.targetCPUUtilizationPercentage }}
+            # target:
+              # type: "Utilization"
+              # averageUtilization: {{ .Values.redis.envoy.targetCPUUtilizationPercentage }}
+      {{- with .Values.redis.envoy.cwcAppend }}
+      configOverride:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ $redisEnvoyName }}
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.redis.envoy "n" "apigee-envoy") }}
+        imagePullPolicy: {{ .Values.redis.envoy.image.pullPolicy }}
+        {{- with .Values.redis.envoy.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.redis.envoy.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.redis.envoy.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+---

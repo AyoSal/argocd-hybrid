@@ -1,0 +1,76 @@
+# Default values for apigee-redis.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+controllerNamespace: apigee-system
+namespace: apigee
+
+apigeeGroupID: 998
+apigeeUserID: 999
+
+nodeSelector:
+  requiredForScheduling: true
+  apigeeRuntime:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-runtime"
+  apigeeData:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-data"
+
+imagePullSecrets: []
+tolerations: []
+affinity: {}
+
+# Apigee Redis
+redis:
+  auth:
+    password: "iloveapis123"
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-redis"
+    tag: "1.10.3"
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  terminationGracePeriodSeconds: 600
+  resources:
+    requests:
+      cpu: 500m
+  readinessProbe:
+    exec:
+      command:
+      - /app/redis-prober
+      - --action=healthcheck
+      - --skip_tls_verify=true
+    periodSeconds: 5
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 12
+  livenessProbe:
+    exec:
+      command:
+      - /app/redis-prober
+      - --action=healthcheck
+      - --skip_tls_verify=true
+    periodSeconds: 5
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 6
+  envoy:
+    image:
+      url: "gcr.io/apigee-release/hybrid/apigee-envoy"
+      tag: "v1.27.0"
+      pullPolicy: IfNotPresent
+    replicaCountMin: 1
+    replicaCountMax: 1
+    targetCPUUtilizationPercentage: 75
+    terminationGracePeriodSeconds: 600
+    resources:
+      requests:
+        cpu: "500m"
+    readinessProbe:
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 12
+    livenessProbe:
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 6

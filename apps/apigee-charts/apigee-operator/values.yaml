@@ -1,0 +1,59 @@
+# Default values for apigee-operator.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+controllerNamespace: apigee-system
+namespace: apigee
+
+#
+# Cert Manager
+#
+certManager:
+  namespace: cert-manager
+
+apigeeGroupID: 998
+apigeeUserID: 999
+
+nodeSelector:
+  requiredForScheduling: true
+  apigeeRuntime:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-runtime"
+  apigeeData:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-data"
+
+imagePullSecrets: []
+
+# Apigee Operators controller
+ao:
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-operators"
+    tag: "1.10.3"
+    pullPolicy: IfNotPresent
+  hostNetwork: false
+  args:
+    loglevel: info
+    enableWebhooks: true
+    enableControllers: true
+    enableAPIClient: true
+    disableFluentdSizeLimit: false
+    disableManagedClusterRoles: true
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1024Mi
+    requests:
+      cpu: 100m
+      memory: 512Mi
+
+cassandra:
+  auth:
+    secretProviderClass: ""
+
+# kube rbac proxy
+kubeRBACProxy:
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-kube-rbac-proxy"
+    tag: "v0.14.2"
+    pullPolicy: IfNotPresent

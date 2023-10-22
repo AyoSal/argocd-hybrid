@@ -1,0 +1,19 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: apigee-ingressgateway-manager
+  namespace: {{ include "namespace" . }}
+spec:
+  maxReplicas: {{ default 10 .Values.istiod.replicaCountMax }}
+  minReplicas: {{ default 2 .Values.istiod.replicaCountMin }}
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: apigee-ingressgateway-manager
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: "Utilization"
+        averageUtilization: {{ default 75 .Values.istiod.targetCPUUtilizationPercentage }}

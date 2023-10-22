@@ -1,0 +1,6 @@
+apiVersion: v2
+appVersion: 1.10.3
+description: A Helm chart for Kubernetes
+name: apigee-ingress-manager
+type: application
+version: 1.10.3

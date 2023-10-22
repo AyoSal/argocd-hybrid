@@ -1,0 +1,381 @@
+{{- $runtimeName := "apigee-runtime" -}}
+{{- $synchronizerName := "apigee-synchronizer" -}}
+{{- $udcaName := "apigee-udca" -}}
+{{- $udcaTlsReadinessName := "apigee-tls-readiness" -}}
+{{- $fluentdName := "apigee-fluentd" -}}
+{{- $schemaReadinessName := "apigee-cassandra-schema-readiness" -}}
+{{- $envoyReadinessName := "apigee-redis-envoy-readiness" -}}
+{{- $wiAnnotation := "apigee.cloud.google.com/wi-config-checksum" -}}
+{{- $saAnnotation := "apigee.cloud.google.com/sa-config-checksum" -}}
+{{- $values := .Values -}}
+{{- $chart := .Chart -}}
+{{- $files := .Files -}}
+{{- $release := .Release -}}
+{{- range $i, $env := .Values.envs -}}
+{{- if eq $env.name  $values.env -}}
+{{- $generatedName := include "envScopeEncodedName" (dict "org" $values.org "env" $env.name) -}}
+{{- if $values.org -}}
+apiVersion: apigee.cloud.google.com/v1alpha2
+kind: ApigeeEnvironment
+metadata:
+  name: {{ $generatedName }}
+  namespace: {{ include "namespace"  (dict "release" $release "values" $values) }}
+  labels:
+    apigee.cloud.google.com/platform: apigee
+release:
+  forceUpdate: true
+spec:
+  {{- with $values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  name: {{ $env.name }}
+  organizationRef: {{ include "orgScopeEncodedName" (dict "name" $values.org) }}
+  components:
+    synchronizer:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $values.apigeeUserID }}
+        runAsGroup: {{ $values.apigeeGroupID }}
+        privileged: false
+      {{- if $values.gcp.workloadIdentity.enabled }}
+      podServiceAccountName: {{ $synchronizerName }}-{{ $generatedName }}-sa
+      {{- else }}
+      {{- if and $env.serviceAccountSecretRefs $env.serviceAccountSecretRefs.synchronizer }}
+      appServiceAccountSecretName: "{{ $env.serviceAccountSecretRefs.synchronizer }}"
+      {{- else }}
+      appServiceAccountSecretName: "{{ $synchronizerName }}-{{ $generatedName }}-svc-account"
+      {{- end }}
+      {{- end }}
+      {{- with $values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6}}
+      {{- end }}
+      {{- with $values.synchronizer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- if and $env.serviceAccountPaths $env.serviceAccountPaths.synchronizer }}
+        {{ $saAnnotation }}: {{ $files.Get ( required "$env.serviceAccountPaths.synchronizer is required!!" $env.serviceAccountPaths.synchronizer) | sha256sum }}
+        {{- end -}}
+        {{- with $values.synchronizer.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      version: {{ include "validateVersion" (dict "version" $chart.AppVersion) | quote }}
+      {{- with $values.synchronizer.hostNetwork }}
+      hostNetwork: {{ . }}
+      {{- end }}
+      autoScaler:
+        minReplicas: {{ include "getSynchronizerReplicaMin" (dict "value" $values.synchronizer.replicaCountMin  "env" $env) }}
+        maxReplicas: {{ include "getSynchronizerReplicaMax" (dict "value" $values.synchronizer.replicaCountMax  "env" $env) }}
+        metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: "Utilization"
+              averageUtilization: {{ $values.synchronizer.targetCPUUtilizationPercentage }}
+      {{- if $env.PollInterval }}
+      properties:
+        pollInterval: {{ $env.PollInterval }}
+      {{- end }}
+      {{- if or $values.httpProxy $values.synchronizer.cwcAppend }}
+      configOverride:
+      {{- if $values.synchronizer.cwcAppend }}
+      {{- range $k, $v := $values.synchronizer.cwcAppend }}
+        "{{ $k }}": "{{ $v }}"
+      {{- end }}
+      {{- end }}
+      {{- if $values.httpProxy }}
+        "conf_http_client_service_jetty.proxy.enabled": "true"
+        "conf_http_client_service_jetty.proxy.host": "{{ $values.httpProxy.host }}"
+        {{- if $values.httpProxy.port }}
+        "conf_http_client_service_jetty.proxy.port": "{{ $values.httpProxy.port }}"
+        {{- end }}
+        {{- if $values.httpProxy.username }}
+        "conf_http_client_service_jetty.proxy.user": "{{ $values.httpProxy.username }}"
+        {{- end }}
+        {{- if $values.httpProxy.password }}
+        "conf_http_client_service_jetty.proxy.password": "{{ b64enc $values.httpProxy.password }}"
+        {{- end }}
+      {{- end }}
+      {{- end }}
+      initContainers:
+      - name: {{ $schemaReadinessName }}
+        image: {{ include "container.image" (dict "hub" $values.hub "o" $values.mart "n" "apigee-mart-server") }}
+        imagePullPolicy: {{ $values.mart.image.pullPolicy }}
+      containers:
+      - name: {{ $synchronizerName }}
+        image: {{ include "container.image" (dict "hub" $values.hub "o" $values.synchronizer "n" "apigee-synchronizer") }}
+        imagePullPolicy: {{ $values.synchronizer.image.pullPolicy }}
+        {{- with $values.synchronizer.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with $values.synchronizer.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with $values.synchronizer.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+    udca:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $values.apigeeUserID }}
+        runAsGroup: {{ $values.apigeeGroupID }}
+        privileged: false
+      {{- if $values.gcp.workloadIdentity.enabled }}
+      podServiceAccountName: {{ $udcaName }}-{{ $generatedName }}-sa
+      {{- else }}
+      {{- if and $env.serviceAccountSecretRefs $env.serviceAccountSecretRefs.udca }}
+      appServiceAccountSecretName: "{{ $env.serviceAccountSecretRefs.udca }}"
+      {{- else }}
+      appServiceAccountSecretName: "{{ $udcaName }}-{{ $generatedName }}-svc-account"
+      {{- end }}
+      {{- end }}
+      {{- with $values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6}}
+      {{- end }}
+      {{- with $values.udca.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- if and $env.serviceAccountPaths $env.serviceAccountPaths.udca }}
+        {{ $saAnnotation }}: {{ $files.Get ( required "$env.serviceAccountPaths.udca is required!!" $env.serviceAccountPaths.udca) | sha256sum }}
+        {{- end -}}
+        {{- with $values.udca.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      version: {{ include "validateVersion" (dict "version" $chart.AppVersion) | quote }}
+      {{- with $values.udca.hostNetwork }}
+      hostNetwork: {{ . }}
+      {{- end }}
+      autoScaler:
+        minReplicas: {{ include "getUDCAReplicaMin" (dict "value" $values.udca.replicaCountMin  "env" $env) }}
+        maxReplicas: {{ include "getUDCAReplicaMax" (dict "value" $values.udca.replicaCountMax  "env" $env) }}
+        metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: "Utilization"
+              averageUtilization: {{ $values.udca.targetCPUUtilizationPercentage }}
+      initContainers:
+      - name: {{ $udcaTlsReadinessName }}
+        image: {{ include "container.image" (dict "hub" $values.hub "o" $values.udca "n" "apigee-udca") }}
+        imagePullPolicy: {{ $values.udca.image.pullPolicy }}
+      containers:
+      - name: {{ $udcaName }}
+        image: {{ include "container.image" (dict "hub" $values.hub "o" $values.udca "n" "apigee-udca") }}
+        imagePullPolicy: {{ $values.udca.image.pullPolicy }}
+        {{- with $values.udca.env }}
+        env:
+        {{- range $k, $v := . }}
+        - name: "{{ $k }}"
+          value: "{{ $v }}"
+        {{- end }}
+        {{- end }}
+        {{- with $values.udca.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with $values.udca.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with $values.udca.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      - name: "{{ $fluentdName }}"
+        image: {{ include "container.image" (dict "hub" $values.hub "o" $values.udca.fluentd "n" "apigee-stackdriver-logging-agent") }}
+        imagePullPolicy: {{ $values.udca.fluentd.image.pullPolicy }}
+        {{- with $values.udca.fluentd.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+    runtime:
+      {{- if $values.gcp.workloadIdentity.enabled }}
+      podServiceAccountName: {{ $runtimeName }}-{{ $generatedName }}-sa
+      {{- else }}
+      {{- if and $env.serviceAccountSecretRefs $env.serviceAccountSecretRefs.runtime }}
+      appServiceAccountSecretName: "{{ $env.serviceAccountSecretRefs.runtime }}"
+      {{- else }}
+      appServiceAccountSecretName: "{{ $runtimeName }}-{{ $generatedName }}-svc-account"
+      {{- end }}
+      {{- end }}
+      {{- with $values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6 }}
+      {{- end }}
+      {{- with $values.runtime.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- if and $env.serviceAccountPaths $env.serviceAccountPaths.runtime }}
+        {{ $saAnnotation }}: {{ $files.Get ( required "$env.serviceAccountPaths.runtime is required!!" $env.serviceAccountPaths.runtime) | sha256sum }}
+        {{- end -}}
+        {{- with $values.runtime.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      version: {{ include "validateVersion" (dict "version" $chart.AppVersion) | quote }}
+      {{- with $values.runtime.hostNetwork }}
+      hostNetwork: {{ . }}
+      {{- end }}
+      autoScaler:
+        minReplicas: {{ include "getRuntimeReplicaMin" (dict "value" $values.runtime.replicaCountMin  "env" $env) }}
+        maxReplicas: {{ include "getRuntimeReplicaMax" (dict "value" $values.runtime.replicaCountMax  "env" $env) }}
+        behavior:
+          scaleDown:
+            policies:
+            - periodSeconds: {{ $values.runtime.hpaBehavior.scaleDown.percent.periodSeconds }}
+              type: Percent
+              value: {{ $values.runtime.hpaBehavior.scaleDown.percent.value }}
+            - periodSeconds: {{ $values.runtime.hpaBehavior.scaleDown.pods.periodSeconds }}
+              type: Pods
+              value: {{ $values.runtime.hpaBehavior.scaleDown.pods.value }}
+            selectPolicy: {{ $values.runtime.hpaBehavior.scaleDown.selectPolicy }}
+            stabilizationWindowSeconds: {{ $values.runtime.hpaBehavior.scaleDown.stabilizationWindowSeconds }}
+          scaleUp:
+            policies:
+            - periodSeconds: {{ $values.runtime.hpaBehavior.scaleUp.percent.periodSeconds }}
+              type: Percent
+              value: {{ $values.runtime.hpaBehavior.scaleUp.percent.value }}
+            - periodSeconds: {{ $values.runtime.hpaBehavior.scaleUp.pods.periodSeconds }}
+              type: Pods
+              value: {{ $values.runtime.hpaBehavior.scaleUp.pods.value }}
+            selectPolicy: {{ $values.runtime.hpaBehavior.scaleUp.selectPolicy }}
+            stabilizationWindowSeconds: {{ $values.runtime.hpaBehavior.scaleUp.stabilizationWindowSeconds }}
+        metrics:
+        - type: Pods
+          pods:
+            metric:
+              name: server_main_task_wait_time
+            target:
+              averageValue:  {{ $values.runtime.hpaMetrics.serverMainTaskWaitTime }}
+              type: AverageValue
+        - type: Pods
+          pods:
+            metric:
+              name: server_nio_task_wait_time
+            target:
+              averageValue: {{ $values.runtime.hpaMetrics.serverNioTaskWaitTime }}
+              type: AverageValue
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: "Utilization"
+              {{- $runtimeTargetCPUUtilizationPercentage := $values.runtime.hpaMetrics.targetCPUUtilizationPercentage }}
+              {{- if $values.runtime.targetCPUUtilizationPercentage }}
+              {{- $runtimeTargetCPUUtilizationPercentage = $values.runtime.targetCPUUtilizationPercentage }}
+              {{- end }}
+              averageUtilization: {{ default $values.runtime.hpaMetrics.targetCPUUtilizationPercentage $values.runtime.targetCPUUtilizationPercentage }}
+      {{- if or ($values.runtime.cwcAppend) ($env.httpProxy)}}
+      configOverride:
+      {{- range $k, $v := $values.runtime.cwcAppend }}
+        "{{ $k }}": "{{ $v }}"
+      {{- end }}
+      {{- if $env.httpProxy }}
+        "conf_http_HTTPClient.use.proxy": "true"
+        "conf/http.properties+HTTPClient.proxy.host": "{{ $env.httpProxy.host }}"
+        {{- if $env.httpProxy.scheme }}
+        "conf/http.properties+HTTPClient.proxy.type": "{{ upper $env.httpProxy.scheme }}"
+        {{- else }}
+        "conf/http.properties+HTTPClient.proxy.type": "HTTP"
+        {{- end }}
+        {{- if $env.httpProxy.port }}
+        "conf/http.properties+HTTPClient.proxy.port": "{{ $env.httpProxy.port }}"
+        {{- end }}
+        {{- if and $env.httpProxy.username $env.httpProxy.password }}
+        "conf/http.properties+HTTPClient.proxy.user": {{ $env.httpProxy.username }}
+        "conf/http.properties+HTTPClient.proxy.password": {{ $env.httpProxy.password }}
+        {{- end }}
+      {{- end }}
+      {{- end }}
+      initContainers:
+      - name: {{ $schemaReadinessName }}
+        image: {{ include "container.image" (dict "hub" $values.hub "o" $values.mart "n" "apigee-mart-server") }}
+        imagePullPolicy: {{ $values.mart.image.pullPolicy }}
+      - name: {{ $envoyReadinessName }}
+        image: {{ include "container.image" (dict "hub" $values.hub "o" $values.runtime "n" "apigee-runtime") }}
+        imagePullPolicy: {{ $values.runtime.image.pullPolicy }}
+      containers:
+      - name: {{ $runtimeName }}
+        image: {{ include "container.image" (dict "hub" $values.hub "o" $values.runtime "n" "apigee-runtime") }}
+        imagePullPolicy: {{ $values.runtime.image.pullPolicy }}
+        env:
+        - name: {{ printf "%s_KMS_ENCRYPTION_KEY" (include "hyphenToUnderscoreUpper" (dict "s" $values.org)) }}
+          valueFrom:
+            secretKeyRef:
+              {{- if $values.kmsEncryptionSecret }}
+              name: {{ $values.kmsEncryptionSecret.name }}
+              key: {{ $values.kmsEncryptionSecret.key }}
+              {{- else }}
+              name: "{{ $generatedName }}-encryption-keys"
+              key: kmsEncryptionKey
+              {{- end }}
+        - name: {{ printf "%s_%s_CACHE_ENCRYPTION_KEY" (include "hyphenToUnderscoreUpper" (dict "s" $values.org)) (include "hyphenToUnderscoreUpper" (dict "s" $env.name)) }}
+          valueFrom:
+            secretKeyRef:
+              {{- if $env.cacheEncryptionSecret }}
+              name:  {{ $env.cacheEncryptionSecret.name }}
+              key: {{ $env.cacheEncryptionSecret.key }}
+              {{- else }}
+              name: "{{ $generatedName }}-encryption-keys"
+              key: cacheEncryptionKey
+              {{- end }}
+        - name: {{ printf "%s_%s_KVM_ENCRYPTION_KEY" (include "hyphenToUnderscoreUpper" (dict "s" $values.org)) (include "hyphenToUnderscoreUpper" (dict "s" $env.name)) }}
+          valueFrom:
+            secretKeyRef:
+              {{- if $env.kvmEncryptionSecret }}
+              name: {{ $env.kvmEncryptionSecret.name }}
+              key: {{ $env.kvmEncryptionSecret.key }}
+              {{- else }}
+              name: "{{ $generatedName }}-encryption-keys"
+              key: envKvmEncryptionKey
+              {{- end }}
+        - name: {{ printf "%s_KVM_ENCRYPTION_KEY" (include "hyphenToUnderscoreUpper" (dict "s" $values.org)) }}
+          valueFrom:
+            secretKeyRef:
+              {{- if $values.kvmEncryptionSecret }}
+              name: {{ $values.kvmEncryptionSecret.name }}
+              key: {{ $values.kvmEncryptionSecret.key }}
+              {{- else }}
+              name: "{{ $generatedName }}-encryption-keys"
+              key: kvmEncryptionKey
+              {{- end }}
+        {{- with $values.runtime.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with $values.runtime.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with $values.runtime.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - name: java-sec-policy-volume
+          readOnly: true
+          mountPath: {{ $values.runtime.installDir }}/security
+        - name: policy-secret-volume
+          readOnly: true
+          mountPath: {{ $values.runtime.installDir }}/policy-secrets
+      volumes:
+      - name: java-sec-policy-volume
+        secret:
+          secretName: "{{ $values.org }}-{{ $env.name }}-java-sec-policy"
+          optional: true
+      - name: policy-secret-volume
+        secret:
+          secretName: "{{ $values.org }}-{{ $env.name }}-policy-secret"
+          optional: true
+{{- end -}}
+{{- end -}}
+{{- end -}}

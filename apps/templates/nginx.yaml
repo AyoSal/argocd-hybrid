@@ -7,11 +7,17 @@ metadata:
   - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  source:
-    path: ''
-    repoURL: 'https://charts.mirantis.com'
-    chart: nginx  
-    targetRevision: 0.1.0
+  sources:
+    - path: ''
+      repoURL: 'https://charts.mirantis.com'
+      chart: nginx  
+      targetRevision: 0.1.0
+    - repoURL: 'git@github.com:AyoSal/argocd-hybrid.git'
+      path: apps/apigee-charts/nginx
+      targetRevision: HEAD  
+      helm:
+        valueFiles:
+          - values-nginx.yaml
   destination:
     namespace: apigee
     server: https://kubernetes.default.svc

@@ -1,0 +1,118 @@
+{{/*
+  validateVersion
+    @param version - version
+*/}}
+{{- define "validateVersion" -}}
+{{- $v := lower .version | replace "." "" }}
+{{- if mustRegexMatch "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$" $v }}
+{{- $v -}}
+{{- else -}}
+{{- fail "version .version is not a valid format" }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+  nodeAffinity.both
+*/}}
+{{- define "nodeAffinity.both" -}}
+nodeAffinity:
+  requiredDuringSchedulingIgnoredDuringExecution:
+    nodeSelectorTerms:
+    - matchExpressions:
+      - key: {{ quote (index .apigeeRuntime "key") }}
+        operator: In
+        values:
+        - {{ quote (index .apigeeRuntime "value") }}
+    - matchExpressions:
+      - key: {{ quote (index .apigeeData "key") }}
+        operator: In
+        values:
+        - {{ quote (index .apigeeData "value") }}
+  preferredDuringSchedulingIgnoredDuringExecution:
+  - weight: 100
+    preference:
+      matchExpressions:
+      - key: {{ quote (index .apigeeRuntime "key") }}
+        operator: In
+        values:
+        - {{ quote (index .apigeeRuntime "value") }}
+      - key: {{ quote (index .apigeeData "key") }}
+        operator: In
+        values:
+        - {{ quote (index .apigeeData "value") }}
+{{- end -}}
+
+{{/*
+  nodeAffinity.runtime
+*/}}
+{{- define "nodeAffinity.runtime" -}}
+nodeAffinity:
+  requiredDuringSchedulingIgnoredDuringExecution:
+    nodeSelectorTerms:
+    - matchExpressions:
+      - key: {{ quote (index .apigeeRuntime "key") }}
+        operator: In
+        values:
+        - {{ quote (index .apigeeRuntime "value") }}
+  preferredDuringSchedulingIgnoredDuringExecution:
+  - weight: 100
+    preference:
+      matchExpressions:
+      - key: {{ quote (index .apigeeRuntime "key") }}
+        operator: In
+        values:
+        - {{ quote (index .apigeeRuntime "value") }}
+{{- end -}}
+
+{{/*
+  shortName
+*/}}
+{{- define "shortName" -}}
+{{- substr 0 15 . -}}
+{{- end -}}
+
+{{/*
+  shortSha
+*/}}
+{{- define "shortSha" -}}
+{{- sha256sum . | trunc 7 -}}
+{{- end -}}
+
+{{/*
+  orgScopeEncodedName
+    @param name - string
+*/}}
+{{- define "orgScopeEncodedName" -}}
+{{- if .name -}}
+{{- printf "%s-%s" (include "shortName" .name) (include "shortSha" .name) -}}
+{{- else -}}
+{{ fail "Please provide org name in overrides" }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+  namespace resolves the overridden namespace where a value from --namespace
+  flag in the cmd line will have a higher precedence than in the override file
+  or the default value from values.yaml.
+*/}}
+{{- define "namespace" -}}
+{{- if eq .Release.Namespace "default" -}}
+{{- .Values.namespace -}}
+{{- else -}}
+{{- .Release.Namespace -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+  container.image returns the image for the given component
+    @param hub - string repo base url
+    @param o - object component
+    @param n - string image name
+*/}}
+{{- define "container.image" -}}
+{{ if .hub }}
+{{- printf "%s/%s:%s" .hub .n .o.image.tag -}}
+{{ else }}
+{{- printf "%s:%s" .o.image.url .o.image.tag -}}
+{{- end -}}
+{{- end -}}

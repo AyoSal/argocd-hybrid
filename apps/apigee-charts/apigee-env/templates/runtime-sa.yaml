@@ -1,0 +1,20 @@
+{{- $runtimeName := "apigee-runtime" -}}
+{{- $values := .Values -}}
+{{- $chart := .Chart -}}
+{{- $release := .Release -}}
+{{- range $i, $env := .Values.envs -}}
+{{- if eq $env.name  $values.env -}}
+{{- $generatedName := include "envScopeEncodedName" (dict "org" $values.org "env" $env.name) -}}
+{{- if $values.org -}}
+{{- if $values.gcp.workloadIdentity.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $runtimeName }}-{{ $generatedName }}-sa
+  namespace: {{ include "namespace"  (dict "release" $release "values" $values) }}
+  annotations:
+    iam.gke.io/gcp-service-account: {{ include "getRuntimeGSA" (dict "value" $values.gcp.workloadIdentity.gsa  "env" $env) }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

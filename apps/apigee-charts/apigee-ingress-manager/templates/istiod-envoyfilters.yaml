@@ -1,0 +1,1109 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apigee-envoyfilters
+  namespace: {{ include "namespace" . }}
+  labels:
+    apigee.cloud.google.com/platform: apigee
+data:
+  envoyfilters.yaml: |-
+    apiVersion: networking.istio.io/v1alpha3
+    kind: EnvoyFilter
+    metadata:
+      name: apigee-envoyfilter-1-12
+      namespace: {{ include "namespace" . }}
+    spec:
+      workloadSelector:
+        labels:
+          app: apigee-ingressgateway
+      configPatches:
+      - applyTo: NETWORK_FILTER
+        match:
+          listener:
+            filterChain:
+              filter:
+                name: "envoy.filters.network.http_connection_manager"
+          proxy:
+            proxyVersion: ^1\.12.*
+        patch:
+          operation: MERGE
+          value:
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+              server_header_transformation: PASS_THROUGH
+      - applyTo: ROUTE_CONFIGURATION
+        match:
+          proxy:
+            proxyVersion: ^1\.12.*
+        patch:
+          operation: MERGE
+          value:
+            response_headers_to_remove:
+            - "server"
+            # https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route.proto#envoy-v3-api-msg-config-route-v3-routeconfiguration
+            request_headers_to_add:
+            - header:
+                key: 'x-apigee-tls-server-name'
+                value: '%REQ(:AUTHORITY)%'
+            - header:
+                key: 'x-apigee-tls-cipher'
+                value: '%DOWNSTREAM_TLS_CIPHER%'
+            - header:
+                key: 'x-apigee-tls-protocol'
+                value: '%DOWNSTREAM_TLS_VERSION%'
+            - header:
+                key: 'x-apigee-tls-session-id'
+                value: '%DOWNSTREAM_TLS_SESSION_ID%'
+            - header:
+                key: 'x-apigee-tls-client-cert-fingerprint'
+                value: '%DOWNSTREAM_PEER_FINGERPRINT_256%'
+            - header:
+                key: 'x-apigee-tls-client-cert-serial'
+                value: '%DOWNSTREAM_PEER_SERIAL%'
+            - header:
+                key: 'x-apigee-tls-client-raw-cert'
+                value: '%DOWNSTREAM_PEER_CERT%'
+            - header:
+                key: 'x-apigee-tls-client-i-dn'
+                value: '%DOWNSTREAM_PEER_ISSUER%'
+            - header:
+                key: 'x-apigee-tls-client-s-dn'
+                value: '%DOWNSTREAM_PEER_SUBJECT%'
+            - header:
+                key: 'x-apigee-client-connection'
+                value: '%DOWNSTREAM_REMOTE_ADDRESS%'
+      - applyTo: NETWORK_FILTER
+        match:
+          context: GATEWAY
+          proxy:
+            proxyVersion: ^1\.12.*
+          listener:
+            filterChain:
+              filter:
+                name: "envoy.filters.network.http_connection_manager"
+        patch:
+          operation: MERGE
+          value:
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+              merge_slashes: true
+      - applyTo: HTTP_FILTER
+        match:
+          context: GATEWAY
+          proxy:
+            proxyVersion: ^1\.12.*
+          listener:
+            filterChain:
+              filter:
+                name: "envoy.filters.network.http_connection_manager"
+                subFilter:
+                  name: "envoy.filters.http.router"
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: envoy.lua
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua"
+              inlineCode: |
+                function envoy_on_request(request_handle)
+                  -- Sanitize and remove any x-apigee and x-envoy headers from the request.
+                  toremove = {}
+                  for k, v in pairs(request_handle:headers()) do
+                    lowerkey = string.lower(k)
+                    if string.find(lowerkey, "^x%-apigee") ~= nil or string.find(lowerkey, "^x%-envoy") ~= nil then
+                      toremove[k] = ""
+                    end
+                  end
+                  for k,v in pairs(toremove) do
+                    request_handle:headers():remove(k)
+                  end
+
+                  -- Add X-APIGEE-MESSAGE-ID and handle Gooogle LB health check requests.
+                  request_handle:headers():replace("X-APIGEE-MESSAGE-ID", request_handle:headers():get("X-REQUEST-ID"))
+                  user_agent = request_handle:headers():get("USER-AGENT")
+                  if user_agent ~= nil and (user_agent:sub(1, 8) == "GoogleHC"
+                    or user_agent == "GoogleStackdriverMonitoring-UptimeChecks(https://cloud.google.com/monitoring)") then
+                    p = request_handle:headers():get(":PATH")
+                    if p == "/healthz/ingress" then
+                      request_handle:respond({[":status"] = "200"}, "Apigee Ingress is healthy")
+                    end
+                    if p:sub(1,8) == "/healthz" then
+                      request_handle:headers():add("x-apigee-heartbeat", "true")
+                      request_handle:headers():replace(":PATH", p:sub(9,-1))
+                    end
+                  end
+                end
+
+                -- Sanitize and remove any x-apigee and x-envoy headers from responses.
+                function envoy_on_response(response_handle)
+                  toremove = {}
+                  for k, v in pairs(response_handle:headers()) do
+                    lowerkey = string.lower(k)
+                    if string.find(lowerkey, "^x%-apigee") ~= nil or string.find(lowerkey, "^x%-envoy") ~= nil then
+                      normalized_key = string.gsub(string.gsub(lowerkey, "%.", "_"), "%-", "_")
+                      response_handle:streamInfo():dynamicMetadata():set("envoy.lua",normalized_key,v)
+                      toremove[k] = ""
+                    end
+                  end
+                  for k,v in pairs(toremove) do
+                    response_handle:headers():remove(k)
+                  end
+                end
+      - applyTo: HTTP_FILTER
+        match:
+          context: SIDECAR_OUTBOUND
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.http_connection_manager
+                subFilter:
+                  name: envoy.filters.http.router
+          proxy:
+            proxyVersion: ^1\.12.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","response_flags","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace","grpc_response_status"]}]}
+                  root_id: stats_outbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: stats_outbound
+      - applyTo: HTTP_FILTER
+        match:
+          context: SIDECAR_INBOUND
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.http_connection_manager
+                subFilter:
+                  name: envoy.filters.http.router
+          proxy:
+            proxyVersion: ^1\.12.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","response_flags","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace","grpc_response_status"]}]}
+                  root_id: stats_inbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: stats_inbound
+      - applyTo: HTTP_FILTER
+        match:
+          context: GATEWAY
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.http_connection_manager
+                subFilter:
+                  name: envoy.filters.http.router
+          proxy:
+            proxyVersion: ^1\.12.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","response_flags","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace","grpc_response_status"]}]}
+                  root_id: stats_outbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: stats_outbound
+      - applyTo: NETWORK_FILTER
+        match:
+          context: SIDECAR_INBOUND
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.tcp_proxy
+          proxy:
+            proxyVersion: ^1\.12.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.network.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","response_flags","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace"]}]}
+                  root_id: stats_inbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: tcp_stats_inbound
+      - applyTo: NETWORK_FILTER
+        match:
+          context: SIDECAR_OUTBOUND
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.tcp_proxy
+          proxy:
+            proxyVersion: ^1\.12.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.network.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","response_flags","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace"]}]}
+                  root_id: stats_outbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: tcp_stats_outbound
+      - applyTo: NETWORK_FILTER
+        match:
+          context: GATEWAY
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.tcp_proxy
+          proxy:
+            proxyVersion: ^1\.12.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.network.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","response_flags","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace"]}]}
+                  root_id: stats_outbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: tcp_stats_outbound
+      - applyTo: NETWORK_FILTER
+        match:
+          context: GATEWAY
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.http_connection_manager
+          proxy:
+            proxyVersion: ^1\.12.*
+        patch:
+          operation: MERGE
+          value:
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+              preserve_external_request_id: true
+      - applyTo: NETWORK_FILTER
+        match:
+          context: GATEWAY
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.http_connection_manager
+          proxy:
+            proxyVersion: ^1\.12.*
+        patch:
+          operation: MERGE
+          value:
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+              request_id_extension:
+                typed_config:
+                  "@type": "type.googleapis.com/envoy.extensions.request_id.uuid.v3.UuidRequestIdConfig"
+                  pack_trace_reason: false
+    ---
+    apiVersion: networking.istio.io/v1alpha3
+    kind: EnvoyFilter
+    metadata:
+      name: apigee-envoyfilter-1-15
+      namespace: {{ include "namespace" . }}
+    spec:
+      workloadSelector:
+        labels:
+          app: apigee-ingressgateway
+      configPatches:
+      - applyTo: NETWORK_FILTER
+        match:
+          listener:
+            filterChain:
+              filter:
+                name: "envoy.filters.network.http_connection_manager"
+          proxy:
+            proxyVersion: ^1\.15.*
+        patch:
+          operation: MERGE
+          value:
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+              server_header_transformation: PASS_THROUGH
+      - applyTo: ROUTE_CONFIGURATION
+        match:
+          proxy:
+            proxyVersion: ^1\.15.*
+        patch:
+          operation: MERGE
+          value:
+            response_headers_to_remove:
+            - "server"
+            # https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route.proto#envoy-v3-api-msg-config-route-v3-routeconfiguration
+            request_headers_to_add:
+            - header:
+                key: 'x-apigee-tls-server-name'
+                value: '%REQ(:AUTHORITY)%'
+            - header:
+                key: 'x-apigee-tls-cipher'
+                value: '%DOWNSTREAM_TLS_CIPHER%'
+            - header:
+                key: 'x-apigee-tls-protocol'
+                value: '%DOWNSTREAM_TLS_VERSION%'
+            - header:
+                key: 'x-apigee-tls-session-id'
+                value: '%DOWNSTREAM_TLS_SESSION_ID%'
+            - header:
+                key: 'x-apigee-tls-client-cert-fingerprint'
+                value: '%DOWNSTREAM_PEER_FINGERPRINT_256%'
+            - header:
+                key: 'x-apigee-tls-client-cert-serial'
+                value: '%DOWNSTREAM_PEER_SERIAL%'
+            - header:
+                key: 'x-apigee-tls-client-raw-cert'
+                value: '%DOWNSTREAM_PEER_CERT%'
+            - header:
+                key: 'x-apigee-tls-client-i-dn'
+                value: '%DOWNSTREAM_PEER_ISSUER%'
+            - header:
+                key: 'x-apigee-tls-client-s-dn'
+                value: '%DOWNSTREAM_PEER_SUBJECT%'
+            - header:
+                key: 'x-apigee-client-connection'
+                value: '%DOWNSTREAM_REMOTE_ADDRESS%'
+      - applyTo: NETWORK_FILTER
+        match:
+          context: GATEWAY
+          proxy:
+            proxyVersion: ^1\.15.*
+          listener:
+            filterChain:
+              filter:
+                name: "envoy.filters.network.http_connection_manager"
+        patch:
+          operation: MERGE
+          value:
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+              merge_slashes: true
+      - applyTo: HTTP_FILTER
+        match:
+          context: GATEWAY
+          proxy:
+            proxyVersion: ^1\.15.*
+          listener:
+            filterChain:
+              filter:
+                name: "envoy.filters.network.http_connection_manager"
+                subFilter:
+                  name: "envoy.filters.http.router"
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: envoy.lua
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua"
+              inlineCode: |
+                function envoy_on_request(request_handle)
+                  -- Sanitize and remove any x-apigee and x-envoy headers from the request.
+                  toremove = {}
+                  for k, v in pairs(request_handle:headers()) do
+                    lowerkey = string.lower(k)
+                    if string.find(lowerkey, "^x%-apigee") ~= nil or string.find(lowerkey, "^x%-envoy") ~= nil then
+                      toremove[k] = ""
+                    end
+                  end
+                  for k,v in pairs(toremove) do
+                    request_handle:headers():remove(k)
+                  end
+
+                  -- Add X-APIGEE-MESSAGE-ID and handle Gooogle LB health check requests.
+                  request_handle:headers():replace("X-APIGEE-MESSAGE-ID", request_handle:headers():get("X-REQUEST-ID"))
+                  user_agent = request_handle:headers():get("USER-AGENT")
+                  if user_agent ~= nil and (user_agent:sub(1, 8) == "GoogleHC"
+                    or user_agent == "GoogleStackdriverMonitoring-UptimeChecks(https://cloud.google.com/monitoring)") then
+                    p = request_handle:headers():get(":PATH")
+                    if p == "/healthz/ingress" then
+                      request_handle:respond({[":status"] = "200"}, "Apigee Ingress is healthy")
+                    end
+                    if p:sub(1,8) == "/healthz" then
+                      request_handle:headers():add("x-apigee-heartbeat", "true")
+                      request_handle:headers():replace(":PATH", p:sub(9,-1))
+                    end
+                  end
+                end
+
+                -- Sanitize and remove any x-apigee and x-envoy headers from responses.
+                function envoy_on_response(response_handle)
+                  toremove = {}
+                  for k, v in pairs(response_handle:headers()) do
+                    lowerkey = string.lower(k)
+                    if string.find(lowerkey, "^x%-apigee") ~= nil or string.find(lowerkey, "^x%-envoy") ~= nil then
+                      normalized_key = string.gsub(string.gsub(lowerkey, "%.", "_"), "%-", "_")
+                      response_handle:streamInfo():dynamicMetadata():set("envoy.lua",normalized_key,v)
+                      toremove[k] = ""
+                    end
+                  end
+                  for k,v in pairs(toremove) do
+                    response_handle:headers():remove(k)
+                  end
+                end
+      - applyTo: HTTP_FILTER
+        match:
+          context: SIDECAR_OUTBOUND
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.http_connection_manager
+                subFilter:
+                  name: envoy.filters.http.router
+          proxy:
+            proxyVersion: ^1\.15.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","response_flags","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace","grpc_response_status"]}]}
+                  root_id: stats_outbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: stats_outbound
+      - applyTo: HTTP_FILTER
+        match:
+          context: SIDECAR_INBOUND
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.http_connection_manager
+                subFilter:
+                  name: envoy.filters.http.router
+          proxy:
+            proxyVersion: ^1\.15.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","response_flags","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace","grpc_response_status"]}]}
+                  root_id: stats_inbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: stats_inbound
+      - applyTo: HTTP_FILTER
+        match:
+          context: GATEWAY
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.http_connection_manager
+                subFilter:
+                  name: envoy.filters.http.router
+          proxy:
+            proxyVersion: ^1\.15.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","response_flags","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace","grpc_response_status"]}]}
+                  root_id: stats_outbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: stats_outbound
+      - applyTo: NETWORK_FILTER
+        match:
+          context: SIDECAR_INBOUND
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.tcp_proxy
+          proxy:
+            proxyVersion: ^1\.15.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.network.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","response_flags","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace","grpc_response_status"]}]}
+                  root_id: stats_inbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: tcp_stats_inbound
+      - applyTo: NETWORK_FILTER
+        match:
+          context: SIDECAR_OUTBOUND
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.tcp_proxy
+          proxy:
+            proxyVersion: ^1\.15.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.network.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","response_flags","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace"]}]}
+                  root_id: stats_outbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: tcp_stats_outbound
+      - applyTo: NETWORK_FILTER
+        match:
+          context: GATEWAY
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.tcp_proxy
+          proxy:
+            proxyVersion: ^1\.15.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.network.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","response_flags","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace"]}]}
+                  root_id: stats_outbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: tcp_stats_outbound
+      - applyTo: NETWORK_FILTER
+        match:
+          context: GATEWAY
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.http_connection_manager
+          proxy:
+            proxyVersion: ^1\.15.*
+        patch:
+          operation: MERGE
+          value:
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+              preserve_external_request_id: true
+      - applyTo: NETWORK_FILTER
+        match:
+          context: GATEWAY
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.http_connection_manager
+          proxy:
+            proxyVersion: ^1\.15.*
+        patch:
+          operation: MERGE
+          value:
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+              request_id_extension:
+                typed_config:
+                  "@type": "type.googleapis.com/envoy.extensions.request_id.uuid.v3.UuidRequestIdConfig"
+                  pack_trace_reason: false
+    ---
+    apiVersion: networking.istio.io/v1alpha3
+    kind: EnvoyFilter
+    metadata:
+      name: apigee-envoyfilter-1-17
+      namespace: {{ include "namespace" . }}
+    spec:
+      workloadSelector:
+        labels:
+          app: apigee-ingressgateway
+      configPatches:
+      - applyTo: NETWORK_FILTER
+        match:
+          listener:
+            filterChain:
+              filter:
+                name: "envoy.filters.network.http_connection_manager"
+          proxy:
+            proxyVersion: ^1\.17.*
+        patch:
+          operation: MERGE
+          value:
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+              server_header_transformation: PASS_THROUGH
+      - applyTo: ROUTE_CONFIGURATION
+        match:
+          proxy:
+            proxyVersion: ^1\.17.*
+        patch:
+          operation: MERGE
+          value:
+            response_headers_to_remove:
+            - "server"
+            # https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route.proto#envoy-v3-api-msg-config-route-v3-routeconfiguration
+            request_headers_to_add:
+            - header:
+                key: 'x-apigee-tls-server-name'
+                value: '%REQ(:AUTHORITY)%'
+            - header:
+                key: 'x-apigee-tls-cipher'
+                value: '%DOWNSTREAM_TLS_CIPHER%'
+            - header:
+                key: 'x-apigee-tls-protocol'
+                value: '%DOWNSTREAM_TLS_VERSION%'
+            - header:
+                key: 'x-apigee-tls-session-id'
+                value: '%DOWNSTREAM_TLS_SESSION_ID%'
+            - header:
+                key: 'x-apigee-tls-client-cert-fingerprint'
+                value: '%DOWNSTREAM_PEER_FINGERPRINT_256%'
+            - header:
+                key: 'x-apigee-tls-client-cert-serial'
+                value: '%DOWNSTREAM_PEER_SERIAL%'
+            - header:
+                key: 'x-apigee-tls-client-raw-cert'
+                value: '%DOWNSTREAM_PEER_CERT%'
+            - header:
+                key: 'x-apigee-tls-client-i-dn'
+                value: '%DOWNSTREAM_PEER_ISSUER%'
+            - header:
+                key: 'x-apigee-tls-client-s-dn'
+                value: '%DOWNSTREAM_PEER_SUBJECT%'
+            - header:
+                key: 'x-apigee-client-connection'
+                value: '%DOWNSTREAM_REMOTE_ADDRESS%'
+      - applyTo: NETWORK_FILTER
+        match:
+          context: GATEWAY
+          proxy:
+            proxyVersion: ^1\.17.*
+          listener:
+            filterChain:
+              filter:
+                name: "envoy.filters.network.http_connection_manager"
+        patch:
+          operation: MERGE
+          value:
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+              merge_slashes: true
+      - applyTo: HTTP_FILTER
+        match:
+          context: GATEWAY
+          proxy:
+            proxyVersion: ^1\.17.*
+          listener:
+            filterChain:
+              filter:
+                name: "envoy.filters.network.http_connection_manager"
+                subFilter:
+                  name: "envoy.filters.http.router"
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: envoy.lua
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua"
+              inlineCode: |
+                function envoy_on_request(request_handle)
+                  -- Sanitize and remove any x-apigee and x-envoy headers from the request.
+                  toremove = {}
+                  allowlist = {
+                    ["x-apigee-application"]=true,
+                    ["x-apigee-proxy"]=true,
+                    ["x-apigee-vhost"]=true,
+                    ["x-apigee-organization"]=true,
+                    ["x-apigee-environment"]=true,
+                    ["x-apigee-local"]=true,
+                    ["x-apigee-chaining-env"]=true,
+                    ["x-apigee-chaining-proxy"]=true}
+                  for k, v in pairs(request_handle:headers()) do
+                    lowerkey = string.lower(k)
+                    if string.find(lowerkey, "^x%-apigee") ~= nil or string.find(lowerkey, "^x%-envoy") ~= nil then
+                      if not allowlist[lowerkey] then
+                        toremove[k] = ""
+                      end
+                    end
+                  end
+                  for k,v in pairs(toremove) do
+                    request_handle:headers():remove(k)
+                  end
+
+                  -- Add X-APIGEE-TRACKING-ID
+                  if (request_handle:headers():get("x-cloud-trace-context") ~= nil)
+                  then
+                    cloud_trace_context = request_handle:headers():get("x-cloud-trace-context")
+                    split_ids = split_string_on_forward_slash(cloud_trace_context)
+                    request_handle:headers():replace("X-APIGEE-TRACKING-ID", split_ids[1])
+                  else
+                    request_handle:headers():replace("X-APIGEE-TRACKING-ID", request_handle:headers():get("X-REQUEST-ID"))
+                  end
+
+                  -- Add X-APIGEE-MESSAGE-ID for backward compatability
+                  request_handle:headers():replace("X-APIGEE-MESSAGE-ID", request_handle:headers():get("X-REQUEST-ID"))
+
+                  -- Handle Gooogle LB health check requests.
+                  user_agent = request_handle:headers():get("USER-AGENT")
+                  if user_agent ~= nil and (user_agent:sub(1, 8) == "GoogleHC"
+                    or user_agent == "GoogleStackdriverMonitoring-UptimeChecks(https://cloud.google.com/monitoring)") then
+                    p = request_handle:headers():get(":PATH")
+                    if p == "/healthz/ingress" then
+                      request_handle:respond({ [":status"] = "200" }, "Apigee Ingress is healthy")
+                    end
+                    if p:sub(1, 8) == "/healthz" then
+                      request_handle:headers():add("x-apigee-heartbeat", "true")
+                      request_handle:headers():replace(":PATH", p:sub(9, -1))
+                    end
+                  end
+                end
+
+                -- Sanitize and remove any x-apigee and x-envoy headers from responses.
+                function envoy_on_response(response_handle)
+                  toremove = {}
+                  for k, v in pairs(response_handle:headers()) do
+                    lowerkey = string.lower(k)
+                    if string.find(lowerkey, "^x%-apigee") ~= nil or string.find(lowerkey, "^x%-envoy") ~= nil then
+                      normalized_key = string.gsub(string.gsub(lowerkey, "%.", "_"), "%-", "_")
+                      response_handle:streamInfo():dynamicMetadata():set("envoy.lua",normalized_key,v)
+                      toremove[k] = ""
+                    end
+                  end
+                  for k,v in pairs(toremove) do
+                    response_handle:headers():remove(k)
+                  end
+                end
+
+                -- Helper Function to split the cloud trace context header into trace id and span id
+                function split_string_on_forward_slash(input_str)
+                  local words = {}
+                  for w in input_str:gmatch("([^/]+)") do
+                    table.insert(words, w)
+                  end
+                  return words
+                end
+      - applyTo: HTTP_FILTER
+        match:
+          context: SIDECAR_OUTBOUND
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.http_connection_manager
+                subFilter:
+                  name: envoy.filters.http.router
+          proxy:
+            proxyVersion: ^1\.17.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace","grpc_response_status"]}]}
+                  root_id: stats_outbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: stats_outbound
+      - applyTo: HTTP_FILTER
+        match:
+          context: SIDECAR_INBOUND
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.http_connection_manager
+                subFilter:
+                  name: envoy.filters.http.router
+          proxy:
+            proxyVersion: ^1\.17.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace","grpc_response_status"]}]}
+                  root_id: stats_inbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: stats_inbound
+      - applyTo: HTTP_FILTER
+        match:
+          context: GATEWAY
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.http_connection_manager
+                subFilter:
+                  name: envoy.filters.http.router
+          proxy:
+            proxyVersion: ^1\.17.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace","grpc_response_status"]}]}
+                  root_id: stats_outbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: stats_outbound
+      - applyTo: NETWORK_FILTER
+        match:
+          context: SIDECAR_INBOUND
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.tcp_proxy
+          proxy:
+            proxyVersion: ^1\.17.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.network.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace","grpc_response_status"]}]}
+                  root_id: stats_inbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: tcp_stats_inbound
+      - applyTo: NETWORK_FILTER
+        match:
+          context: SIDECAR_OUTBOUND
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.tcp_proxy
+          proxy:
+            proxyVersion: ^1\.17.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.network.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace"]}]}
+                  root_id: stats_outbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: tcp_stats_outbound
+      - applyTo: NETWORK_FILTER
+        match:
+          context: GATEWAY
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.tcp_proxy
+          proxy:
+            proxyVersion: ^1\.17.*
+        patch:
+          operation: INSERT_BEFORE
+          value:
+            name: istio.stats
+            typed_config:
+              '@type': type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.filters.network.wasm.v3.Wasm
+              value:
+                config:
+                  configuration:
+                    '@type': type.googleapis.com/google.protobuf.StringValue
+                    value: |
+                      {"metrics":[{"tags_to_remove":["connection_security_policy","request_protocol","source_workload","destination_workload","destination_app","destination_canonical_revision","destination_canonical_service","destination_cluster","destination_principal","destination_service","destination_service_name","destination_service_namespace","destination_version","destination_workload_namespace","reporter","source_app","source_canonical_revision","source_canonical_service","source_cluster","source_principal","source_version","source_workload_namespace"]}]}
+                  root_id: stats_outbound
+                  vm_config:
+                    code:
+                      local:
+                        inline_string: envoy.wasm.stats
+                    runtime: envoy.wasm.runtime.null
+                    vm_id: tcp_stats_outbound
+      - applyTo: NETWORK_FILTER
+        match:
+          context: GATEWAY
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.http_connection_manager
+          proxy:
+            proxyVersion: ^1\.17.*
+        patch:
+          operation: MERGE
+          value:
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+              preserve_external_request_id: true
+      - applyTo: NETWORK_FILTER
+        match:
+          context: GATEWAY
+          listener:
+            filterChain:
+              filter:
+                name: envoy.filters.network.http_connection_manager
+          proxy:
+            proxyVersion: ^1\.17.*
+        patch:
+          operation: MERGE
+          value:
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+              request_id_extension:
+                typed_config:
+                  "@type": "type.googleapis.com/envoy.extensions.request_id.uuid.v3.UuidRequestIdConfig"
+                  pack_trace_reason: false
+    ---

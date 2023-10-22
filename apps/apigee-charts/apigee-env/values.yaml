@@ -1,0 +1,204 @@
+# Default values for apigee-env.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+org: "foo"
+env: ""
+
+k8sCluster:
+  name: ""
+  region: ""
+
+gcp:
+  region: us-central1
+  projectID: ""
+  projectIDRuntime: ""
+  workloadIdentity:
+    enabled: false
+
+controllerNamespace: apigee-system
+namespace: apigee
+
+apigeeGroupID: 998
+apigeeUserID: 999
+
+nodeSelector:
+  apigeeRuntime:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-runtime"
+  apigeeData:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-data"
+
+imagePullSecrets: []
+
+
+tolerations: []
+
+affinity: {}
+
+mart:
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-mart-server"
+    tag: "1.10.3"
+    pullPolicy: IfNotPresent
+
+# Apigee Synchronizer.
+synchronizer:
+  serviceAccountPath:
+  serviceAccountSecret:
+  pollInterval: 60
+  terminationGracePeriodSeconds: 30
+  replicaCountMin: 1
+  replicaCountMax: 4
+  targetCPUUtilizationPercentage: 75
+  nodeSelector:
+    key:
+    value:
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-synchronizer"
+    tag: "1.10.3"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+  livenessProbe:
+    httpGet:
+      path: /v1/probes/live
+      scheme: HTTPS
+      port: 8843
+    timeoutSeconds: 1
+    failureThreshold: 12
+    periodSeconds: 5
+    initialDelaySeconds: 15
+  readinessProbe:
+    httpGet:
+      path: /v1/probes/ready
+      scheme: HTTPS
+      port: 8843
+    timeoutSeconds: 1
+    successThreshold: 1
+    failureThreshold: 2
+    periodSeconds: 5
+    initialDelaySeconds: 0
+
+# Apigee Runtime.
+runtime:
+  cwcAppend:
+    "conf_metrics_server.metrics.latency.histogram.buckets.milliseconds": "BUCKETS,1D,2D,5D,10D,25D,50D,75D,100D,250D,500D,750D,1000D,2500D,5000D,7500D,10000D"
+  replicaCountMin: 1
+  replicaCountMax: 4
+  installDir: "/opt/apigee/apigee-runtime"
+  terminationGracePeriodSeconds: 180
+  service:
+    type: ClusterIP
+  nodeSelector:
+    key:
+    value:
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-runtime"
+    tag: "1.10.3"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  livenessProbe:
+    httpGet:
+      path: /v1/probes/live
+      scheme: HTTPS
+      port: 8843
+    timeoutSeconds: 5
+    failureThreshold: 12
+    periodSeconds: 5
+    initialDelaySeconds: 15
+  readinessProbe:
+    httpGet:
+      path: /v1/probes/ready
+      scheme: HTTPS
+      port: 8843
+    timeoutSeconds: 1
+    successThreshold: 1
+    failureThreshold: 2
+    periodSeconds: 5
+    initialDelaySeconds: 15
+  hpaMetrics:
+    serverMainTaskWaitTime: 400M
+    serverNioTaskWaitTime: 400M
+    targetCPUUtilizationPercentage: 75
+  hpaBehavior:
+    scaleDown:
+      percent:
+        periodSeconds: 60
+        value: 20
+      pods:
+        periodSeconds: 60
+        value: 2
+      selectPolicy: Min
+      stabilizationWindowSeconds: 120
+    scaleUp:
+      percent:
+        periodSeconds: 60
+        value: 20
+      pods:
+        periodSeconds: 60
+        value: 4
+      selectPolicy: Max
+      stabilizationWindowSeconds: 30
+
+# Apigee UDCA
+udca:
+  env:
+  "API_TENANT_GCS_UPLOAD_ENABLED": "false"
+  "NOOP_MODE": "false"
+  dataDir:
+    base: "/opt/apigee/data"
+    apiDataSubDir: "api"
+    traceDataSubDir: "trace"
+    eventDataSubDir: "event"
+  pollingIntervalInSec: 1
+  replicaCountMin: 1
+  replicaCountMax: 4
+  targetCPUUtilizationPercentage: 75
+  terminationGracePeriodSeconds: 600
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-udca"
+    tag: "1.10.3"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  livenessProbe:
+    httpGet:
+      path: /v1/probes/live
+      port: 7070
+      scheme: HTTPS
+    timeoutSeconds: 1
+    failureThreshold: 2
+    periodSeconds: 5
+    initialDelaySeconds: 0
+  fluentd:
+    image:
+      url: "gcr.io/apigee-release/hybrid/apigee-stackdriver-logging-agent"
+      tag: "1.9.12-2"
+      pullPolicy: IfNotPresent
+    resources:
+      limits:
+        memory: 500Mi
+      requests:
+        cpu: 500m
+        memory: 250Mi
+
+# These are the defaults encryption keys
+defaults:
+  org:
+    kmsEncryptionKey: "aWxvdmVhcGlzMTIzNDU2Nw=="
+    kvmEncryptionKey: "aWxvdmVhcGlzMTIzNDU2Nw=="
+    contractEncryptionKey: "aWxvdmVhcGlzMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM="
+    axHashSalt: "iloveapis123"
+  env:
+    kmsEncryptionKey: "aWxvdmVhcGlzMTIzNDU2Nw=="
+    kvmEncryptionKey: "aWxvdmVhcGlzMTIzNDU2Nw=="
+    cacheEncryptionKey: "aWxvdmVhcGlzMTIzNDU2Nw=="

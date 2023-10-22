@@ -1,0 +1,98 @@
+# Default values for apigee-datastore.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+controllerNamespace: apigee-system
+namespace: apigee
+
+apigeeGroupID: 998
+apigeeUserID: 999
+
+gcp:
+  region: us-central1
+  projectID: ""
+  projectIDRuntime: ""
+  workloadIdentity:
+    enabled: false
+
+nodeSelector:
+  requiredForScheduling: true
+  apigeeRuntime:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-runtime"
+  apigeeData:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-data"
+
+#
+# Apigee Cassandra.
+#
+cassandra:
+  forceDelete: false
+  auth:
+    default:
+      password: "iloveapis123"
+    admin:
+      username: "admin_user"
+      password: "iloveapis123"
+    ddl:
+      username: "ddl_user"
+      password: "iloveapis123"
+    dml:
+      username: "dml_user"
+      password: "iloveapis123"
+    jmx:
+      username: "jmxuser"
+      password: "iloveapis123"
+    jolokia:
+      username: "jolokiauser"
+      password: "iloveapis123"
+    image:
+      url: "gcr.io/apigee-release/hybrid/apigee-hybrid-cassandra-client"
+      tag: "1.10.3"
+      pullPolicy: IfNotPresent
+  replicaCount: 1
+  terminationGracePeriodSeconds: 300
+  multiRegionSeedHost:
+  port: 9042
+  nodeSelector:
+    key:
+    value:
+  storage:
+    storageClass:
+    storageSize: 10Gi
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-hybrid-cassandra"
+    tag: "1.10.3"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+  maxHeapSize: 512M
+  heapNewSize: 100M
+  clusterName: "apigeecluster"
+  datacenter: "dc-1"
+  rack: "ra-1"
+  backup:
+    enabled: false
+    image:
+      url: "gcr.io/apigee-release/hybrid/apigee-cassandra-backup-utility"
+      tag: "1.10.3"
+      pullPolicy: IfNotPresent
+    serviceAccountPath:
+    schedule: "0 2 * * *"
+    dbStorageBucket:
+    cloudProvider: "GCP"
+  restore:
+    enabled: false
+    snapshotTimestamp:
+    image:
+      url: "gcr.io/apigee-release/hybrid/apigee-cassandra-backup-utility"
+      tag: "1.10.3"
+      pullPolicy: IfNotPresent
+    serviceAccountPath:
+    dbStorageBucket:
+    cloudProvider: "GCP"
+  hostNetwork:
+  dnsPolicy:

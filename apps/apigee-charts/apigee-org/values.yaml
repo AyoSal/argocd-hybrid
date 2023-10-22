@@ -1,0 +1,231 @@
+# Default values for apigee-org.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+contractProvider: https://apigee.googleapis.com
+
+org: ""
+
+k8sCluster:
+  name: ""
+  region: ""
+
+gcp:
+  region: us-central1
+  projectID: ""
+  projectIDRuntime: ""
+  workloadIdentity:
+    enabled: false
+
+controllerNamespace: apigee-system
+namespace: apigee
+
+apigeeGroupID: 998
+apigeeUserID: 999
+
+orgScopedUDCA: true
+
+nodeSelector:
+  apigeeRuntime:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-runtime"
+  apigeeData:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-data"
+
+imagePullSecrets: []
+
+
+tolerations: []
+
+affinity: {}
+
+# Cassandra
+cassandra:
+  auth:
+    image:
+      url: "gcr.io/apigee-release/hybrid/apigee-hybrid-cassandra-client"
+      tag: "1.10.3"
+      pullPolicy: IfNotPresent
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-hybrid-cassandra"
+    tag: "1.10.3"
+    pullPolicy: IfNotPresent
+  restore:
+    enabled: false
+
+# Cassandra User Setup
+cassandraUserSetup:
+  annotations: {}
+
+# Cassandra Schema Setup
+cassandraSchemaSetup:
+  annotations: {}
+
+
+# Cassandra Schema Validation
+cassandraSchemaValidation:
+  annotations: {}
+
+# Mint Task Scheduler
+mintTaskScheduler:
+  annotations: {}
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-mint-task-scheduler"
+    tag: "1.10.3"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+
+# Apigee Ingressgateway.
+apigeeIngressGateway:
+  replicaCountMin: 2
+  replicaCountMax: 4
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-asm-ingress"
+    tag: "1.17.2-asm.8-distroless"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 1Gi
+    requests:
+      cpu: 300m
+      memory: 128Mi
+
+# Apigee MART
+mart:
+  replicaCountMin: 1
+  replicaCountMax: 5
+  targetCPUUtilizationPercentage: 75
+  terminationGracePeriodSeconds: 30
+  nodeSelector: {}
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-mart-server"
+    tag: "1.10.3"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  initCheckCF:
+    resources:
+      requests:
+        cpu: 10m
+  livenessProbe:
+    httpGet:
+      path: /v1/probes/live
+      scheme: HTTPS
+      port: 8843
+    timeoutSeconds: 1
+    failureThreshold: 12
+    periodSeconds: 5
+    initialDelaySeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /v1/probes/ready
+      scheme: HTTPS
+      port: 8843
+    timeoutSeconds: 1
+    successThreshold: 1
+    failureThreshold: 2
+    periodSeconds: 5
+    initialDelaySeconds: 15
+  metricsURL: "/v1/server/metrics"
+  ingress:
+    connectTimeout: 20
+
+# Apigee Connect Agent
+connectAgent:
+  server: "apigeeconnect.googleapis.com:443"
+  logLevel: "ERROR"
+  logVerbosity: "0"
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-connect-agent"
+    tag: "1.10.3"
+    pullPolicy: IfNotPresent
+  replicaCountMin: 1
+  replicaCountMax: 1
+  targetCPUUtilizationPercentage: 75
+  terminationGracePeriodSeconds: 600
+  resources:
+    requests:
+      cpu: 200m
+      memory: 128Mi
+
+# Apigee Watcher
+watcher:
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-watcher"
+    tag: "1.10.3"
+    pullPolicy: IfNotPresent
+  replicaCountMin: 1
+  replicaCountMax: 1
+  annotations: {}
+  targetCPUUtilizationPercentage: 75
+  terminationGracePeriodSeconds: 600
+  resources:
+    requests:
+      cpu: 200m
+      memory: 128Mi
+  args:
+    enableIssueScanning: true
+    issueScanInterval: 60
+
+# Apigee UDCA
+udca:
+  env:
+  "API_TENANT_GCS_UPLOAD_ENABLED": "false"
+  "NOOP_MODE": "false"
+  dataDir:
+    base: "/opt/apigee/data"
+    apiDataSubDir: "api"
+    traceDataSubDir: "trace"
+    eventDataSubDir: "event"
+  pollingIntervalInSec: 1
+  replicaCountMin: 1
+  replicaCountMax: 4
+  targetCPUUtilizationPercentage: 75
+  terminationGracePeriodSeconds: 600
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-udca"
+    tag: "1.10.3"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  livenessProbe:
+    httpGet:
+      path: /v1/probes/live
+      port: 7070
+      scheme: HTTPS
+    timeoutSeconds: 1
+    failureThreshold: 2
+    periodSeconds: 5
+    initialDelaySeconds: 0
+  fluentd:
+    image:
+      url: "gcr.io/apigee-release/hybrid/apigee-stackdriver-logging-agent"
+      tag: "1.9.12-2"
+      pullPolicy: IfNotPresent
+    resources:
+      limits:
+        memory: 500Mi
+      requests:
+        cpu: 500m
+        memory: 250Mi
+
+
+# These are the defaults encryption keys
+defaults:
+  org:
+    kmsEncryptionKey: "aWxvdmVhcGlzMTIzNDU2Nw=="
+    kvmEncryptionKey: "aWxvdmVhcGlzMTIzNDU2Nw=="
+    contractEncryptionKey: "aWxvdmVhcGlzMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM="
+    axHashSalt: "iloveapis123"
+  env:
+    kmsEncryptionKey: "aWxvdmVhcGlzMTIzNDU2Nw=="
+    kvmEncryptionKey: "aWxvdmVhcGlzMTIzNDU2Nw=="
+    cacheEncryptionKey: "aWxvdmVhcGlzMTIzNDU2Nw=="

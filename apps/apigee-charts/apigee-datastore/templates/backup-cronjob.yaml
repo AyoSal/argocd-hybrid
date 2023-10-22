@@ -1,0 +1,174 @@
+{{- $name := "default" }}
+{{- $actionbk := "apigee-cassandra-backup"}}
+{{- $secretKey := "dbbackup_key.json" }}
+{{- $httpProxyURL := include "http_proxy.url" . -}}
+{{- if .Values.cassandra.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $actionbk }}
+  namespace: {{ include "namespace" . }}
+spec:
+  schedule: "{{ .Values.cassandra.backup.schedule }}"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.nodeSelector }}
+          affinity:
+            {{- include "nodeAffinity.runtime" . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.cassandra.backup.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: {{ .Values.apigeeUserID }}
+            runAsGroup: {{ .Values.apigeeGroupID }}
+            fsGroup: {{ .Values.apigeeGroupID }}
+          serviceAccountName: {{ $actionbk }}-sa
+          containers:
+          - name: {{ $actionbk }}
+            command:
+            - /bin/bash
+            - -c
+            - /usr/bin/BackupDBMaster.sh
+            image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.cassandra.backup "n" "apigee-cassandra-backup-utility") }}
+            imagePullPolicy: {{ .Values.cassandra.backup.image.pullPolicy }}
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+              privileged: false
+            env:
+            - name: APIGEE_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CASSANDRA_CLUSTER_NAME
+              value: {{ .Values.cassandra.clusterName }}
+            - name: CASSANDRA_DC
+              value: {{ .Values.cassandra.datacenter }}
+            - name: APIGEE_CLOUDPROVIDER
+              value: "{{ .Values.cassandra.backup.cloudProvider }}"
+            {{- if .Values.httpProxy }}
+            - name: http_proxy
+              value: {{ $httpProxyURL }}
+            {{- end }}
+            {{- if .Values.cassandra.backup.dbStorageBucket }}
+            - name: DBSTORAGE_BUCKET
+              value: "{{ .Values.cassandra.backup.dbStorageBucket }}"
+            {{- end }}
+            {{- if .Values.cassandra.backup.server }}
+            - name: BACKUP_SERVER_IP
+              value: "{{ .Values.cassandra.backup.server }}"
+            {{- end }}
+            {{- if .Values.cassandra.backup.storageDirectory }}
+            - name: BACKUP_STORAGE_DIR
+              value: "{{ .Values.cassandra.backup.storageDirectory }}"
+            {{- end }}
+            - name: BACKUP_KEY_FILE
+              value: "/var/secrets/keys/key"
+            {{- if .Values.cassandra.auth.secretProviderClass }}
+            - name: CASSANDRA_ADMIN_USERNAME_PATH
+              value: /opt/apigee/externalsecrets/adminUsername
+            - name: CASSANDRA_ADMIN_PASSWORD_PATH
+              value: /opt/apigee/externalsecrets/adminPassword
+            {{- else }}
+            - name: CASSANDRA_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.cassandra.auth.secret }}
+                  name: {{ .Values.cassandra.auth.secret }}
+                  {{- else }}
+                  name: apigee-datastore-{{ $name }}-creds
+                  {{- end }}
+                  key: admin.user
+            - name: CASSANDRA_DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.cassandra.auth.secret }}
+                  name: {{ .Values.cassandra.auth.secret }}
+                  {{- else }}
+                  name: apigee-datastore-{{ $name }}-creds
+                  {{- end }}
+                  key: admin.password
+            - name: APIGEE_JMX_USER
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.cassandra.auth.secret }}
+                  name: {{ .Values.cassandra.auth.secret }}
+                  {{- else }}
+                  name: apigee-datastore-{{ $name }}-creds
+                  {{- end }}
+                  key: jmx.user
+            - name: APIGEE_JMX_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.cassandra.auth.secret }}
+                  name: {{ .Values.cassandra.auth.secret }}
+                  {{- else }}
+                  name: apigee-datastore-{{ $name }}-creds
+                  {{- end }}
+                  key: jmx.password
+            {{- end }}
+            volumeMounts:
+            - name: backup-data-volume
+              mountPath: /opt/apigee/data
+            - name: {{ $actionbk }}
+              mountPath: /var/secrets/google
+            - name: tls-volume
+              readOnly: true
+              mountPath: /opt/apigee/ssl
+            - name: {{ $actionbk }}-key-file
+              mountPath: /var/secrets/keys
+            {{- if .Values.cassandra.auth.secretProviderClass }}
+            - name: apigee-external-secrets
+              mountPath: /opt/apigee/externalsecrets
+              readOnly: true
+            {{- end }}
+          volumes:
+          - name: backup-data-volume
+            emptyDir:
+              sizeLimit: 10Mi
+          - name: {{ $actionbk }}
+            secret:
+              defaultMode: 0644
+              items:
+              - key: {{ $secretKey }}
+                path: {{ $secretKey }}
+              {{- if .Values.cassandra.backup.serviceAccountRef }}
+              secretName: "{{ .Values.cassandra.backup.serviceAccountRef }}"
+              {{- else }}
+              secretName: "{{ $actionbk }}-svc-account"
+              {{- end }}
+              optional: true
+          - name: {{ $actionbk }}-key-file
+            secret:
+              defaultMode: 0400
+              {{- if .Values.cassandra.backup.keyFileRef }}
+              secretName: {{ .Values.cassandra.backup.keyFileRef }}
+              {{- else }}
+              secretName: {{ $actionbk }}-key-file
+              {{- end }}
+              optional: true
+          - name: tls-volume
+            secret:
+              secretName: "{{ $actionbk }}-tls"
+          {{- if .Values.cassandra.auth.secretProviderClass }}
+          - name: apigee-external-secrets
+            csi:
+              driver: secrets-store.csi.k8s.io
+              readOnly: true
+              volumeAttributes:
+                secretProviderClass: {{ .Values.cassandra.auth.secretProviderClass }}
+          {{- end }}
+          restartPolicy: OnFailure
+---
+{{- end }}
