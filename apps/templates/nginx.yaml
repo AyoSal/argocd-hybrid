@@ -15,7 +15,7 @@ spec:
       helm:
         parameters:
           - name: replicaCount
-            value: 3
+            value: '3'
               #  - repoURL: 'git@github.com:AyoSal/argocd-hybrid.git'
               #   path: apps/apigee-charts/nginx
               #  targetRevision: HEAD  
