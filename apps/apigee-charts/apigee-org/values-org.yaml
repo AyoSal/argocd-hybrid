@@ -36,3 +36,6 @@ istiod:
 
 watcher:
   serviceAccountRef: "hybrid-secret-for-serviceaccount"   
+
+udca:
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"    
