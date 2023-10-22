@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: operator
+  namespace: argocd
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    path: apps/apigee-charts/apigee-operator
+    repoURL: 'git@github.com:AyoSal/argocd-hybrid.git'
+    targetRevision: HEAD
+    helm:
+      valueFiles:
+        - values-ops.yaml
+  destination:
+    namespace: apigee-system
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=true
