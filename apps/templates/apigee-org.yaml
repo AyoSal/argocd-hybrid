@@ -1,23 +1,23 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: operator
+  name: apigee-org
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "0"  
+    argocd.argoproj.io/sync-wave: "5"  
   finalizers:
   - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    path: apps/apigee-charts/apigee-operator
+    path: apps/apigee-charts/apigee-org
     repoURL: 'git@github.com:AyoSal/argocd-hybrid.git'
     targetRevision: HEAD
     helm:
       valueFiles:
-        - values-ops.yaml
+      - values-org.yaml
   destination:
-    namespace: apigee-system
+    namespace: apigee
     server: https://kubernetes.default.svc
   syncPolicy:
     automated:
