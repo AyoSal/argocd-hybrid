@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vault
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "8"  
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    path: ''
+    repoURL: 'https://helm.releases.hashicorp.com'
+    chart: vault  
+    targetRevision: 0.24.0
+    helm:
+      parameters:
+        - name: csi.enabled
+          value: 'true'
+  destination:
+    namespace: apigee
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=true
