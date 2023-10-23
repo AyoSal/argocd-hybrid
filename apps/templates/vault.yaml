@@ -18,6 +18,10 @@ spec:
       parameters:
         - name: csi.enabled
           value: 'true'
+        - name: server.dev.enabled
+          value: 'true'
+        - name: injector.enabled
+          value: 'true'
   destination:
     namespace: apigee
     server: https://kubernetes.default.svc
