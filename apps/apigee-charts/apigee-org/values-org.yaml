@@ -1,5 +1,4 @@
 #Override Values for Apigee Org | Hybrid 1.10.3 on GKE Cluster deployed with ArgoCD and Helm
-
 gcp:
   region: us-east1
   projectID: ayos-os-test
@@ -36,12 +35,9 @@ istiod:
 
 watcher:
   serviceAccountRef: "hybrid-secret-for-serviceaccount"   
-
 udca:
   serviceAccountRef: "hybrid-secret-for-serviceaccount"    
- 
 mart:
   serviceAccountRef: "hybrid-secret-for-serviceaccount"    
-
 connectAgent:
   serviceAccountRef: "hybrid-secret-for-serviceaccount"    
