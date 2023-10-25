@@ -20,6 +20,8 @@ spec:
           value: 'true'
         - name: server.dev.enabled
           value: 'true'
+        - name: server.ha.enabled
+          value: 'true'
         - name: injector.enabled
           value: 'true'
   destination:
