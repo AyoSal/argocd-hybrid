@@ -1,4 +1,7 @@
-How to Install Apigee hybrid helm charts using ArgoCD App of Apps Pattern.
+# How to Install Apigee hybrid helm charts using ArgoCD App of Apps Pattern.
+
+
+## Introduction
 This Repo describes steps to install Apigee hybrid with helm charts using ArgoCD in a gitOps style fashion.
 on a GKE cluster.
 
@@ -7,6 +10,7 @@ It also contains cert-manager, nginx, and vault setup on the cluster
 ![Screenshot 2023-10-21 at 10 47 52 AM](https://github.com/AyoSal/argocd-hybrid/assets/27664278/e45fe8e9-7d61-4466-909c-bb5d0351abb0)
 
 
+## Setup Kubernetes Cluster for Apigee Hybrid
 First follow the steps in part 1 to enable required APIs, create your Apigee organization, environment and environment group at this [page](https://cloud.google.com/apigee/docs/hybrid/v1.10/precog-overview).
 
 Create your GKE cluster by following the commands from this [page](https://cloud.google.com/sdk/gcloud/reference/container/clusters/create) as below.
@@ -32,6 +36,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN " -H "Content-Type:application/jso
 ORG_NAME:getSyncAuthorization" -d ''
 ```
 
+## Setup for Apigee Hybrid Helm charts
 Pull the apigee-hybrid helm charts to a local folder as below
 
 ```
@@ -80,6 +85,7 @@ Also create the kubernetes secret for the Apigee hybrid ingress with TLS certifi
 kubectl create secret generic SECRET-NAME  --from-file="cert=PATH_TO_CRT_FILE"  --from-file="key=PATH_TO_KEY_FILE"  -n apigee
 ```
 
+## ArgoCD App of Apps Pattern and ArgoCD Applications
 Pull this repo which already has the charts as well as the templates and manifests files required
 
 
@@ -103,7 +109,7 @@ The various components that get installed as helm charts from the repo and as Ar
 * Item 12 vault
 
 
-
+## ArgoCD Folder Structure
 Below shows the file structure of the repo, lets discuss on the components that get installed with this repo and how you can modify them to make adjustments.
 
 ![Screenshot 2023-11-08 at 9 25 07 PM](https://github.com/AyoSal/argocd-hybrid/assets/27664278/4bda256a-bff6-4be6-abae-4d045d27aa0c)
@@ -134,7 +140,7 @@ Modify the apps/apigee-ingress-manager
 Modify the apps/apigee-org
 
 
-
+# Setup ArgoCD
 
 We now have all the components to install apigee hybrid with helm charts ready.
 Create the ArgoCD namespace 
@@ -177,7 +183,7 @@ Once the repo is created successfully, you will see a green tick as shown below.
 Repeat the process to create repositories for  cert-manager, secrets store driver and Hashicorp vault
 
 
-Deploying Applications to ArgoCD
+## Deploying Applications to ArgoCD
 
 After the repo’s are created we can now trigger build of the applications. During the sync of the applications between the github repo and Argocd the templates are first rendered into manifests and then created as ArgoCD applications which will then be used to trigger creation of the actual kubernetes resources in the gke cluster we created earlier.
 
@@ -216,7 +222,7 @@ Below shows a view of all the apigee hybrid components as ArgoCD applications wh
 
 
 
-Other Approaches with ArgoCD
+## Other Approaches with ArgoCD
 
 When deploying Apigee Helm charts with ArgoCD, there are several different approaches we can take. We can create ArgoCD Applications to point to the Helm repo and a separate repo for overrides.yaml files. Here is a sample ArgoCD application that deploys Apigee Operator from the Helm chart repo and pulls the values file from a Git repo’s dev branch:
 
