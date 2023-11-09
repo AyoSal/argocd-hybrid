@@ -1,4 +1,4 @@
-# argocd-hybrid
+How to Install Apigee hybrid helm charts using ArgoCD App of Apps Pattern.
 This Repo describes steps to install Apigee hybrid with helm charts using ArgoCD in a gitOps style fashion.
 on a GKE cluster.
 
