@@ -28,8 +28,7 @@ Enable synchroniser access ( pre-requisite for installing Apigee hybrid)
 ```
 export TOKEN=$(gcloud auth print-access-token)
 
-curl -X POST -H "Authorization: Bearer
-$TOKEN " -H "Content-Type:application/json" "https://apigee.googleapis.com/v1/organizations/
+curl -X POST -H "Authorization: Bearer $TOKEN " -H "Content-Type:application/json" "https://apigee.googleapis.com/v1/organizations/
 ORG_NAME:getSyncAuthorization" -d ''
 ```
 
@@ -78,7 +77,7 @@ kubectl create secret generic SECRET_NAME  --from-file="client_secret.json=SA_FI
 Also create the kubernetes secret for the Apigee hybrid ingress with TLS certificates
 
 ```
-kubectl create secret generic SECRET-NAME  --from-file="cert=PATH_TO_CRT_FILE" \  --from-file="key=PATH_TO_KEY_FILE" \  -n apigee
+kubectl create secret generic SECRET-NAME  --from-file="cert=PATH_TO_CRT_FILE"  --from-file="key=PATH_TO_KEY_FILE"  -n apigee
 ```
 
 Pull this repo which already has the charts as well as the templates and manifests files required
@@ -112,7 +111,7 @@ Below shows the file structure of the repo, lets discuss on the components that 
 
 We will now take each component and discuss them one after the other
 
-For each component we have a helm chart folder within the apigee-charts folder. Thai folder contains a custom values file which is used to apply configuration changes custom or specific to our apigee hybrid setup
+For each component we have a helm chart folder within the apigee-charts folder. This folder contains a custom values file which is used to apply configuration changes custom or specific to our apigee hybrid setup
 
 For example, for apigee-datastore component we have a folder call apigee-datastore located at /apps/apigee-datastore, which contains the helm charts for apigee datastore as well as a base values file and also a customised values file called apigee-ds.yaml which contains values that are specific to configure the apigee datastore pds and resources as we require and will override the basic installation. We also have a file called datastore.yaml located in the /apps/templates folder which serves as a template for the Argocd application for the apigee-datastore which will be managed by the apigeehybrid application which serves as the umbrella ArgoCD application.
 
@@ -200,7 +199,7 @@ Once this is created and in synced status, we are ready to create the numerous A
 
 If you have auto-sync enabled, whenever you commit a change to your github repo, this will trigger a sync and Argocd will look to compare the state of the resources in the kubernetes cluster with that of the templates in the github repository in a gitops style fashion.
 
-  The Apigee hybrid subcomponents will automatically get picked from the github repo and create the argocd application for each of the components and the underlying kubernetes resources for each of the applications from their charts.
+The Apigee hybrid subcomponents will automatically get picked from the github repo and create the argocd application for each of the components and the underlying kubernetes resources for each of the applications from their charts.
 
 This process will take some time as it goes in to create the resources. To ensure the resources are created in the right order, we can define sync waves, which will ensure the components are spun up in the order we desire.  We do this by adding in an annotation in the template for each of the components as shown below.
 
