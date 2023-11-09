@@ -95,18 +95,18 @@ We achieve this by making use of the app of apps pattern.
 The App of Apps Pattern lets us define a root ArgoCD Application ( in this case named apigeehybrid) which we define in the apps.yaml file at the root of the repo.  Rather than point to an application manifest, the Root App points to a folder ( in this case /apps) which contains the templates folder containing the Application YAML definition for each microservice that’s part of the app bundle (Child Apps). Each microservice’s Application YAML then points to a directory containing the application manifests ( in this case /apps/apigee-charts/”respective chart folder”). 
 
 The various components that get installed as helm charts from the repo and as ArgoCD applications include 
-* Item 1 apigeehybrid
-* Item 2 cert-manager 
-* Item 3 apigee-operator
-* Item 4 apigee-datastore
-* Item 5 apigee-telemetry
-* Item 6 apigee-redis
-* Item 7 apigee-ingress-manager
-* Item 8 Apigee-org
-* Item 9 Apigee-environment
-* Item 10 Apigee-virtualhost
-* Item 11 Secret store csi driver
-* Item 12 vault
+* apigeehybrid
+* cert-manager 
+* apigee-operator
+* apigee-datastore
+* apigee-telemetry
+* apigee-redis
+* apigee-ingress-manager
+* apigee-org
+* apigee-environment
+* apigee-virtualhost
+* secret store csi driver
+* vault
 
 
 ## ArgoCD Folder Structure
