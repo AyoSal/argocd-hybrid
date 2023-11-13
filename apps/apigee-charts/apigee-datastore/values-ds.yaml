@@ -26,7 +26,7 @@ nodeSelector:
 
 cassandra:
   hostNetwork: false
-  replicaCount: 3
+  replicaCount: 6
   resources:
     requests:
       cpu: 4
