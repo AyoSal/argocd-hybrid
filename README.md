@@ -9,8 +9,8 @@ It also contains cert-manager, nginx, and vault setup on the cluster
 
 Please note at this time the helm charts feature of Apigee Hybrid is in preview as of today November 13th 2023. I will provide an update once this has gone GA.
 
+![Screenshot 2023-11-13 at 3 45 17 PM](https://github.com/AyoSal/argocd-hybrid/assets/27664278/51200be1-3ddc-43da-ae7f-b5a540c164a0)
 
-![Screenshot 2023-10-21 at 10 47 52 AM](https://github.com/AyoSal/argocd-hybrid/assets/27664278/e45fe8e9-7d61-4466-909c-bb5d0351abb0)
 
 
 ## Setup Kubernetes Cluster for Apigee Hybrid
