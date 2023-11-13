@@ -9,7 +9,7 @@ It also contains cert-manager, nginx, and vault setup on the cluster
 
 Please note at this time the helm charts feature of Apigee Hybrid is in preview as of today November 13th 2023. I will provide an update once this has gone GA.
 
-![Screenshot 2023-11-13 at 3 45 17 PM](https://github.com/AyoSal/argocd-hybrid/assets/27664278/51200be1-3ddc-43da-ae7f-b5a540c164a0)
+![Image of screenshot](/media/layout.png)
 
 
 
@@ -115,8 +115,7 @@ The various components that get installed as helm charts from the repo and as Ar
 ## ArgoCD Folder Structure
 Below shows the file structure of the repo, lets discuss on the components that get installed with this repo and how you can modify them to make adjustments.
 
-![Screenshot 2023-11-08 at 9 25 07 PM](https://github.com/AyoSal/argocd-hybrid/assets/27664278/4bda256a-bff6-4be6-abae-4d045d27aa0c)
-
+![Image of screenshot](/media/split-overrides-structure.png)
 
 We will now take each component and discuss them one after the other
 
@@ -172,16 +171,16 @@ Retrieve the external IP of the ArgoCD service and use that to log into the Argo
 
 Re-login with your new password.
 
-Click on settings tile and connect to git repo. Create repositories required for ArgoCD to pull the helm charts of the components, 
+Click on settings tile and connect to git repo. Create repositories required for ArgoCD to pull the helm charts of the components as shown below, 
 
-![Screenshot 2023-11-08 at 9 57 41 PM](https://github.com/AyoSal/argocd-hybrid/assets/27664278/7cb9c7b4-c1b4-4f89-b3d2-19c63f346205)
+
+![Image of screenshot](/media/repo-setup.png)
 
 
 For connecting the gitHub repo to ArgoCD, you may need to generate ssh keys and share between github and ArgoCD.
 Once the repo is created successfully, you will see a green tick as shown below.
 
-![Screenshot 2023-11-08 at 10 00 18 PM](https://github.com/AyoSal/argocd-hybrid/assets/27664278/dde4133f-2e9e-40f0-83b6-ddea8dc05813)
-
+![Image of screenshot](/media/argocd-repos.png)
 
 Repeat the process to create repositories for  cert-manager, secrets store driver and Hashicorp vault
 
@@ -198,11 +197,10 @@ kubectl apply -f apps.yaml -n argocd
 
 This will create the apigeehybrid argocd application as follows
 
-![Screenshot 2023-11-08 at 10 07 17 PM](https://github.com/AyoSal/argocd-hybrid/assets/27664278/97948558-a9f3-4e98-aab1-0501e1b23a56)
-
+![Image of screenshot](/media/apigeehybrid-app-sync.png)
 Once this is created and verified in the UI you should also see the apigeehybrid ArgoCD Application in the ArgoCD UI as well as below.
 
-![Screenshot 2023-11-08 at 10 08 30 PM](https://github.com/AyoSal/argocd-hybrid/assets/27664278/57909bd3-89b1-4964-a459-a74615af5eb8)
+![Image of screenshot](/media/apigeehybrid-apptile.png)
 
 Once this is created and in synced status, we are ready to create the numerous Apigee hybrid components.
 
@@ -212,17 +210,15 @@ The Apigee hybrid subcomponents will automatically get picked from the github re
 
 This process will take some time as it goes in to create the resources. To ensure the resources are created in the right order, we can define sync waves, which will ensure the components are spun up in the order we desire.  We do this by adding in an annotation in the template for each of the components as shown below.
 
-![Screenshot 2023-11-08 at 10 15 55 PM](https://github.com/AyoSal/argocd-hybrid/assets/27664278/6f7fcf83-ef6b-4c2b-935a-72e0152bdd25)
+![Image of screenshot](/media/argocd-ds-app-template.png)
 
 Below shows the hierarchy of applications deployed by the  apigeehybrid argocd application
 
-![Screenshot 2023-11-08 at 10 21 21 PM](https://github.com/AyoSal/argocd-hybrid/assets/27664278/5485a26f-aff6-44d5-ba4c-545a47fd2a11)
-
+![Image of screenshot](/media/argocd-heirarchy.png)
 
 Below shows a view of all the apigee hybrid components as ArgoCD applications when fully deployed.
 
-![Screenshot 2023-11-08 at 10 27 38 PM](https://github.com/AyoSal/argocd-hybrid/assets/27664278/bb21db99-e042-4a5c-ae2e-32034b7a2aca)
-
+![Image of screenshot](/media/argocd-app-tiles.png)
 
 
 ## Other Approaches with ArgoCD
