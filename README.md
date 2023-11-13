@@ -81,12 +81,18 @@ Create the kubernetes secret for the serviceaccounts for the various Apigee hybr
 kubectl create secret generic SECRET_NAME  --from-file="client_secret.json=SA_FILE_NAME.json"  -n apigee
 ```
 
+Replace the following:
+SECRET_NAME with the name of the Kubernetes secret you want to create.
+SA_FILE_NAME.json with the name of the downloaded JSON file from the Apigee service account you create in GCP IAM (see this [link](https://cloud.google.com/iam/docs/keys-create-delete#creating) for details about the service account requirements).
+
 
 Also create the kubernetes secret for the Apigee hybrid ingress with TLS certificates
 
 ```
 kubectl create secret generic SECRET-NAME  --from-file="cert=PATH_TO_CRT_FILE"  --from-file="key=PATH_TO_KEY_FILE"  -n apigee
 ```
+ (see this [link](https://cloud.google.com/apigee/docs/hybrid/v1.10/install-create-tls-certificates#create-tls-certificates) for details on setting up TLS certificates). 
+
 
 ## ArgoCD App of Apps Pattern and ArgoCD Applications
 Pull this repo which already has the charts as well as the templates and manifests files required
