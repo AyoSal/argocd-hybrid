@@ -5,8 +5,7 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "0"  
-    notifications.argoproj.io/subscribe.on-sync-succeeded.gmail: argocdtester4@gmail.com  
-    notifications.argoproj.io/subscribe.on-deployed.gmail: argocdtester4@gmail.com  
+    notifications.argoproj.io/subscribe.on-deployed.slack: hybridupdates  
   finalizers:
   - resources-finalizer.argocd.argoproj.io
 spec:

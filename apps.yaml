@@ -3,6 +3,8 @@ kind: Application
 metadata:
   name: apigeehybrid
   namespace: argocd
+  annotations:
+   notifications.argoproj.io/subscribe.on-deployed.slack: hybridupdates  #Slack Channel name  
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
