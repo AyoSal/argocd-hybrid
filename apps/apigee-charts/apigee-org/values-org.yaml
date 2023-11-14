@@ -24,6 +24,20 @@ nodeSelector:
    value: "apigee-data"
 hub: gcr.io/apigee-release/hybrid
 
+virtualhosts:
+  - name: argocd-grp
+    minTLSProtocolVersion: "1.2"
+    selector:
+      app: apigee-ingressgateway
+      ingress_name: argocd-ingress
+    sslSecret: hybrid-cert-secret
+
+ingressGateways:
+  - name: argocd-ingress
+    replicaCountMin: 2
+    replicaCountMax: 4
+    svcType: LoadBalancer
+
 apigeeIngressGateway:
   image:
     url: "gcr.io/apigee-release/hybrid/apigee-asm-ingress"
