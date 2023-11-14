@@ -17,7 +17,7 @@ spec:
       valueFiles:
       - values-vhost.yaml
       parameters:
-      - name: envgroup
+      - name: env-group
         value: argocd-grp  
   destination:
     namespace: apigee
