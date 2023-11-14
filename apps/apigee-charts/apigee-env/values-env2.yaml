@@ -34,12 +34,12 @@ envs:
 
 
 synchronizer:
-  replicaCountMin: 1
-  replicaCountMax: 2
+  replicaCountMin: '1'
+  replicaCountMax: '2'
  
 runtime:
-  replicaCountMin: 1
-  replicaCountMax: 2
+  replicaCountMin: '1'
+  replicaCountMax: '2'
 
 udca:
   serviceAccountRef: "hybrid-secret-for-serviceaccount"
