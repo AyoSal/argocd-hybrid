@@ -33,8 +33,8 @@ cassandra:
       memory: 7Gi
   maxHeapSize: 4096M
   heapNewSize: 600M
-  auth:
-    secretProviderClass: apigee-cassandra-auth-spc  # The name of the SecretProviderClass created in spc.yaml.
+    #  auth:
+    # secretProviderClass: apigee-cassandra-auth-spc  # The name of the SecretProviderClass created in spc.yaml.
 
 hub: gcr.io/apigee-release/hybrid
 
