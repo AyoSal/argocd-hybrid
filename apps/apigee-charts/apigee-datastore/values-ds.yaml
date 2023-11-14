@@ -26,10 +26,10 @@ nodeSelector:
 
 cassandra:
   hostNetwork: false
-  replicaCount: 3
+  replicaCount: '3'
   resources:
     requests:
-      cpu: 4
+      cpu: '4'
       memory: 7Gi
   maxHeapSize: 4096M
   heapNewSize: 600M
