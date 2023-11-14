@@ -3,6 +3,8 @@ kind: Application
 metadata:
   name: virtualhost
   namespace: argocd
+  annotations: 
+    notifications.argoproj.io/subscribe.on-deployed.slack: hybridupdates  
   finalizers:
   - resources-finalizer.argocd.argoproj.io
 spec:

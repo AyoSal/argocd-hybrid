@@ -3,8 +3,8 @@ kind: Application
 metadata:
   name: nginx
   annotations:  
-    notifications.argoproj.io/subscribe.on-sync-succeeded.gmail: argocdtester4@gmail.com
-    notifications.argoproj.io/subscribe.on-deployed.gmail: argocdtester4@gmail.com
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: hybridupdates
+    notifications.argoproj.io/subscribe.on-deployed.slack: hybridupdates  
   namespace: argocd
   finalizers:
   - resources-finalizer.argocd.argoproj.io

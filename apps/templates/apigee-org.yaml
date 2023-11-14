@@ -4,6 +4,7 @@ metadata:
   name: apigee-org
   namespace: argocd
   annotations:
+    notifications.argoproj.io/subscribe.on-deployed.slack: hybridupdates
     argocd.argoproj.io/sync-wave: "5"  
   finalizers:
   - resources-finalizer.argocd.argoproj.io

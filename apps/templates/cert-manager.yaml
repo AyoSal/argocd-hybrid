@@ -4,6 +4,7 @@ metadata:
   name: cert-manager
   namespace: argocd
   annotations:
+    notifications.argoproj.io/subscribe.on-deployed.slack: hybridupdates
     argocd.argoproj.io/sync-wave: "-1"  
   finalizers:
   - resources-finalizer.argocd.argoproj.io
