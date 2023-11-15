@@ -30,13 +30,12 @@ Once your cluster is created, use the below command to gain access to your clust
 gcloud container clusters get-credentials argocd-1103 --region us-east4 --project ayos-os-test
 ```
 
-Enable synchroniser access ( pre-requisite for installing Apigee hybrid)
+Enable synchroniser access ( pre-requisite for installing Apigee hybrid) where ORG_NAME is your Apigee ORG Name which is also the name of your GCP project.
 
 ```
-export TOKEN=$(gcloud auth print-access-token)
+export TOKEN=$(gcloud auth print-access-token) 
 
-curl -X POST -H "Authorization: Bearer $TOKEN " -H "Content-Type:application/json" "https://apigee.googleapis.com/v1/organizations/
-ORG_NAME:getSyncAuthorization" -d ''
+curl -X POST -H "Authorization: Bearer $TOKEN " -H "Content-Type:application/json" "https://apigee.googleapis.com/v1/organizations/$ORG_NAME:getSyncAuthorization" -d ''
 ```
 
 ## Setup for Apigee Hybrid Helm charts
