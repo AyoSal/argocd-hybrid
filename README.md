@@ -129,22 +129,25 @@ For each component we have a helm chart folder within the apigee-charts folder. 
 For example, for apigee-datastore component we have a folder call apigee-datastore located at /apps/apigee-datastore, which contains the helm charts for apigee datastore as well as a base values file and also a customised values file called apigee-ds.yaml which contains values that are specific to configure the apigee datastore pds and resources as we require and will override the basic installation. We also have a file called datastore.yaml located in the /apps/templates folder which serves as a template for the Argocd application for the apigee-datastore which will be managed by the apigeehybrid application which serves as the umbrella ArgoCD application.
 
 
-To modify or customise the setup of the ArgoCD applications for each component  make changes to the following files
- Within the /apps/templates folder
-Modify the apigee-env1.yaml file with the name of the custom values file and a parameter for the name of the environment 
-Modify the apigee-vhost.yaml file with the name of the custom values file and a parameter for the name of the environment group
+To modify or customise the setup of the ArgoCD applications for each component make changes to the following files within the /apps/templates folder
+* Modify the apigee-env1.yaml file with the name of the custom values file and a parameter for the name of the environment 
+* Modify the apigee-vhost.yaml file with the name of the custom values file and a parameter for the name of the environment group
 Repeat the modification process for all the components to state the name of the custom values file.
 
 To customise the hybrid components with custom split overrides modify the custom values files for each component within the apps/ folder as follows
 
-Modify the apps/apigee-datastore/values-ds.yaml file with the number of replicas, nodeselection, with the number of replicas required, memory, cpu, if backup is to be enabled
-Modify the apps/apigee-virtualhost
-Modify the apps/telemetry
-Modify the apps/redis
-Modify the apps/apiee-env
-Modify the apps/apigee-operator
-Modify the apps/apigee-ingress-manager
-Modify the apps/apigee-org
+* Modify the apps/apigee-charts/apigee-datastore/values-ds.yaml file with the number of replicas, nodeselection, with the number of replicas required, memory, cpu, if backup is to be enabled
+
+  
+* Modify the apps/apigee-charts/apigee-virtualhost
+* Modify the apps/apigee-charts/apigee-telemetry
+* Modify the apps/apigee-charts/apigee-redis
+* Modify the apps/apigee-charts/apigee-env
+* Modify the apps/apigee-charts/apigee-operator
+* Modify the apps/apigee-charts/apigee-ingress-manager
+* Modify the apps/apigee-charts/apigee-org
+* cert-manager has been customised as required. Please note for Anthos clusters you can remove the cert-manager configs as Anthos has its own cert-manager setup
+* Basic setup for Vault and secret-store csi driver has been done as well.
 
 
 # Setup ArgoCD
