@@ -5,7 +5,7 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "1"  
-    #notifications.argoproj.io/subscribe.on-deployed.slack: hybridupdates  
+    notifications.argoproj.io/subscribe.on-deployed.slack: hybridupdates
   finalizers:
   - resources-finalizer.argocd.argoproj.io
 spec:
