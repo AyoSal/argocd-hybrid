@@ -1,0 +1,31 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: apigee-env3
+  namespace: argocd
+  annotations:
+    notifications.argoproj.io/subscribe.on-deployed.slack: hybridupdates
+    argocd.argoproj.io/sync-wave: "6"  
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    path: apps/apigee-charts/apigee-env
+    repoURL: 'git@github.com:AyoSal/argocd-hybrid.git'
+    targetRevision: HEAD
+    helm:
+      valueFiles:
+      - values-env3.yaml
+      parameters:  
+      - name: env
+        value: argocd-env3
+  destination:
+    namespace: apigee
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=true
