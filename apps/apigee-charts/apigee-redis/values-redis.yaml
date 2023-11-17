@@ -25,3 +25,6 @@ nodeSelector:
    value: "apigee-data"
 
 hub: gcr.io/apigee-release/hybrid
+
+replicaCountMin: '2'
+replicaCountMax: '3'
