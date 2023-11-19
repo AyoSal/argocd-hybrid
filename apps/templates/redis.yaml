@@ -4,8 +4,9 @@ metadata:
   name: redis
   namespace: argocd
   annotations:
+    argocd.argoproj.io/hook: Sync
     notifications.argoproj.io/subscribe.on-deployed.slack: hybridupdates
-    argocd.argoproj.io/sync-wave: "2"  
+    argocd.argoproj.io/sync-wave: "1"  
   finalizers:
   - resources-finalizer.argocd.argoproj.io
 spec:
