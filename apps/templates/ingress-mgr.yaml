@@ -4,7 +4,8 @@ metadata:
   name: apigee-ingress-manager
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "4"  
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/sync-wave: "3"  
     notifications.argoproj.io/subscribe.on-deployed.slack: hybridupdates  
   finalizers:
   - resources-finalizer.argocd.argoproj.io
