@@ -4,7 +4,6 @@ metadata:
   name: datastore
   namespace: argocd
   annotations:
-    argocd.argoproj.io/hook: PreSync
     argocd.argoproj.io/sync-wave: "1"  
     notifications.argoproj.io/subscribe.on-deployed.slack: hybridupdates
   finalizers:
