@@ -4,7 +4,7 @@ metadata:
   name: operator
   namespace: argocd
   annotations:
-    argocd.argoproj.io/hook: PreSync
+    #argocd.argoproj.io/hook: PreSync
     argocd.argoproj.io/sync-wave: "0"  
     notifications.argoproj.io/subscribe.on-deployed.slack: hybridupdates  
   finalizers:
