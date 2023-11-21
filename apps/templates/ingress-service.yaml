@@ -4,8 +4,7 @@ metadata:
   name: ingress-svc
   namespace: argocd
   annotations:
-    argocd.argoproj.io/hook: PostSync
-    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-wave: "12"
 spec:
   destination:
     server: https://kubernetes.default.svc
