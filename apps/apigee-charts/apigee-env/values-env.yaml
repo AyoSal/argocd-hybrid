@@ -34,8 +34,8 @@ envs:
 
 
 synchronizer:
-  replicaCountMin: '2'
-  replicaCountMax: '4'
+  replicaCountMin: '1'
+  replicaCountMax: '2'
  
 runtime:
   replicaCountMin: '1'
