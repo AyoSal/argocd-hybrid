@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: telemetry
+  name: apigee-telemetry
   namespace: argocd
   annotations:
     notifications.argoproj.io/subscribe.on-deployed.slack: hybridupdates
