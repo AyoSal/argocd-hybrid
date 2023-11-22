@@ -12,6 +12,8 @@ Please note at this time the helm charts feature of Apigee Hybrid is in preview 
 ![Image of screenshot](/media/layout.png)
 
 
+## Create the Apigee Org, Environment and Environment Group in Apigee
+Follow the steps in [Part 1](https://cloud.google.com/apigee/docs/hybrid/v1.10/precog-overview) to create the organization, enivronment and environment groups in the Apigee console as per your requirement
 
 ## Setup Kubernetes Cluster for Apigee Hybrid
 First follow the steps in part 1 to enable required APIs, create your Apigee organization, environment and environment group at this [page](https://cloud.google.com/apigee/docs/hybrid/v1.10/precog-overview).
