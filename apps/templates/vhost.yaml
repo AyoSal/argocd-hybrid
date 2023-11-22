@@ -4,6 +4,7 @@ metadata:
   name: virtualhost
   namespace: argocd
   annotations: 
+    argocd.argoproj.io/sync-wave: "8"
     notifications.argoproj.io/subscribe.on-deployed.slack: hybridupdates  
   finalizers:
   - resources-finalizer.argocd.argoproj.io
