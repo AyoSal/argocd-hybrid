@@ -171,6 +171,9 @@ Patch Argocd service from ClusterIP to loadbalancer
 kubectl -n argocd patch svc argocd-server --type='json' -p '[{"op":"replace","path":"/spec/type","value":"LoadBalancer"}]'
 ```
 
+Download the ArgoCD biinary by followng steps at this [page[(https://github.com/argoproj/argo-cd/releases/tag/v2.9.2) based on your operating system. 
+Once ArgoCD is installed proceed to the next step.
+
 Retrieve the initial password for Argo cd with -
 
 ```
