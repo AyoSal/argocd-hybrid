@@ -1,0 +1,95 @@
+# helmfile example
+# change the chart `version` as needed. Currently, below example uses 1.0.0
+repositories:
+- name: apigee-hybrid-helm-charts
+  url: us-docker.pkg.dev/apigee-release/apigee-hybrid-helm-charts
+  oci: true
+
+#environments:
+#  default:    # us-central1
+#    values:
+#      - envs/us-central1/overrides.yaml
+#  us-west:
+#    values:
+#      - envs/us-west2/overrides.yaml
+#  us-east:
+#    values:
+#      - envs/us-east4/overrides.yaml
+---
+
+releases:
+- name: operator
+  namespace: apigee-system
+  chart: apigee-hybrid-helm-charts/apigee-operator
+  version: 1.0.0
+  values:
+  # replace below overrides to point to your override file.
+  - overrides.yaml
+- name: datastore
+  namespace: apigee
+  chart: apigee-hybrid-helm-charts/apigee-datastore
+  version: 1.0.0
+  needs:
+  - apigee-system/operator
+  values:
+  # replace below overrides to point to your override file.
+  - overrides.yaml
+- name: telemetry
+  namespace: apigee
+  chart: apigee-hybrid-helm-charts/apigee-telemetry
+  version: 1.0.0
+  needs:
+  - apigee-system/operator
+  values:
+  # replace below overrides to point to your override file.
+  - overrides.yaml
+- name: redis
+  namespace: apigee
+  chart: apigee-hybrid-helm-charts/apigee-redis
+  version: 1.0.0
+  needs:
+  - apigee-system/operator
+  values:
+  # replace below overrides to point to your override file.
+  - overrides.yaml
+- name: ingress-manager
+  namespace: apigee
+  chart: apigee-hybrid-helm-charts/apigee-ingress-manager
+  version: 1.0.0
+  needs:
+  - apigee-system/operator
+  values:
+  # replace below overrides to point to your override file.
+  - overrides.yaml
+- name: apigee-hybrid-proj # replace with the org name
+  namespace: apigee
+  chart: apigee-hybrid-helm-charts/apigee-org
+  version: 1.0.0
+  needs:
+  - datastore
+  - telemetry
+  - redis
+  - ingress-manager
+  values:
+  # replace below overrides to point to your override file.
+  - overrides.yaml
+- name: dev # replace with the env name and add this block if you want to configure other envs
+  namespace: apigee
+  chart: apigee-hybrid-helm-charts/apigee-env
+  version: 1.0.0
+  needs:
+  - apigee-hybrid-proj
+  values:
+  # replace below overrides to point to your override file.
+  - overrides.yaml
+  - env: dev
+- name: dev-egroup # replace with the env group name and add this block if you want to configure other env groups
+  namespace: apigee
+  chart: apigee-hybrid-helm-charts/apigee-virtualhost
+  version: 1.0.0
+  needs:
+  - apigee-hybrid-proj
+  values:
+  - overrides.yaml
+  - envgroup: dev-egroup
+  # replace below overrides to point to your override file.
