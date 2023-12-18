@@ -18,6 +18,7 @@ spec:
     namespace: apigee
   syncPolicy:
     automated:
+      prune: true
       selfHeal: true
     retry:
       limit: 5
@@ -25,6 +26,5 @@ spec:
         duration: 5s
         maxDuration: 3m0s
         factor: 2    
-      prune: true
     syncOptions:
     - CreateNamespace=true
