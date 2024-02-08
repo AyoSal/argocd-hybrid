@@ -7,6 +7,9 @@ on a GKE cluster.
 It also contains cert-manager, nginx, and vault setup on the cluster
 
 
+## Disclaimer
+This is not an Officially Supported Google Product!
+
 Please note at this time the helm charts feature of Apigee Hybrid is in preview as of today November 13th 2023. I will provide an update once this has gone GA.
 
 ![Image of screenshot](/media/layout.png)
@@ -320,4 +323,6 @@ When integrate with ArgoCD, we can use helmfile template
 When integrated with ArgoCD, we could use helmfile template command to generate all the manifest files, then check into a Git repo. ArgoCD is set up to monitor the changes in that Git repo and takes actions. From the Git repo we can review the exact changes in Kubernetes manifest files, and decide whether approve or reject the changes, before ArgoCD syncs and applies the changes. ArgoCD in this case is only reponsible to sync the target cluster to the desired state defined in the Git repo. 
 
 
+## Copyright
 
+Copyright 2023 Google LLC. This software is provided as-is, without warranty or representation for any use or purpose. Your use of it is subject to your agreement with Google.
