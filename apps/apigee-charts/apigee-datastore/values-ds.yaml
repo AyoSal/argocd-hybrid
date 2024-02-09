@@ -30,7 +30,7 @@ cassandra:
   resources:
     requests:
       cpu: '4'
-      memory: 5Gi
+      memory: 7Gi
   maxHeapSize: 4096M
   heapNewSize: 600M
   #backup:
