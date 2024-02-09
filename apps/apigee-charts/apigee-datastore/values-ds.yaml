@@ -29,8 +29,8 @@ cassandra:
   replicaCount: '1'
   resources:
     requests:
-      cpu: '2'
-      memory: 3Gi
+      cpu: '4'
+      memory: 5Gi
   maxHeapSize: 4096M
   heapNewSize: 600M
   #backup:
