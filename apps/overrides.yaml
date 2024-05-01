@@ -1,0 +1,101 @@
+#Hybrid 1.10.2 on GKE Cluster deployed with ArgoCD and Helm
+
+gcp:
+  region: us-east1
+  projectID: ayos-os-test
+
+k8sCluster:
+  name: argocd-helm-1102
+  region: us-east4 # Must be the closest Google Cloud region to your cluster.
+org: ayos-os-test
+orgscopedUDCA: true
+instanceID: "argocd-helm1102"
+
+imagePullSecrets:
+  - name: gcr-cred
+
+nodeSelector:
+ # This flag determines if the scheduling passes/fails if the labels are missing.
+ requiredForScheduling: false
+ apigeeRuntime:
+   key: "cloud.google.com/gke-nodepool"
+   value: "apigee-runtime"
+ apigeeData:
+   key: "cloud.google.com/gke-nodepool"
+   value: "apigee-data"
+
+cassandra:
+  hostNetwork: true
+  replicaCount: 3
+
+cassandra:
+  auth:
+    secretProviderClass: apigee-cassandra-auth-spc  # The name of the SecretProviderClass created in spc.yaml.
+
+hub: gcr.io/apigee-release/hybrid
+    #  forceDelete: true
+    # Set to false for single region installations and multi-region installations
+    # with connectivity between pods in different clusters, for example GKE installations.
+    # Set to true  for multi-region installations with no communication between
+    # pods in different clusters, for example GKE On-prem, GKE on AWS, Anthos on bare metal,
+    # AKS, EKS, and OpenShift installations.
+    # See Multi-region deployment: Prerequisites
+
+virtualhosts:
+  - name: argocd-grp
+    minTLSProtocolVersion: "1.2"
+    selector:
+      app: apigee-ingressgateway
+      ingress_name: argocd-ingress
+    sslSecret: hybrid-cert-secret
+
+
+ingressGateways:
+- name: argocd-ingress # maximum 17 characters. See Known issue 243167389.
+  replicaCountMin: 2
+  replicaCountMax: 10
+  svcType: LoadBalancer
+  #svcAnnotations:  # optional. See Known issue 243599452.
+  # SVC_ANNOTATIONS_KEY: SVC_ANNOTATIONS_VALUE
+  #svcLoadBalancerIP: SVC_LOAD_BALANCER_IP  # optional
+
+apigeeIngressGateway:
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-asm-ingress"
+    tag: "1.17.2-asm.8-distroless" 
+    pullPolicy: IfNotPresent  
+
+envs:
+- name: argocd-env
+  serviceAccountSecretRefs:
+    synchronizer: "hybrid-secret-for-serviceaccount"
+    udca: "hybrid-secret-for-serviceaccount"
+    runtime: "hybrid-secret-for-serviceaccount"
+
+
+mart:
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"
+  
+
+connectAgent:
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"
+
+metrics:
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"
+  hostNetwork: true
+
+udca:
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"
+  hostNetwork: true
+
+watcher:
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"
+
+logger:
+  enabled: false
+        # Set to false to disable logger for GKE installations.
+        # Set to true for all platforms other than GKE.
+        # See apigee-logger in Service accounts and roles used by hybrid components.
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"
+
+
