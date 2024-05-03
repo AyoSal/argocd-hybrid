@@ -2,15 +2,15 @@
 
 
 ## Introduction
-This Repo describes steps to install Apigee hybrid with helm charts using ArgoCD in a gitOps style fashion.
-on a GKE cluster.
+This Repo describes steps to install Apigee hybrid with helm charts using ArgoCD in a gitOps style fashion on a GKE cluster.
+
 It also contains cert-manager, nginx, and vault setup on the cluster
 
 
 ## Disclaimer
 This is not an Officially Supported Google Product!
 
-Please note at this time the helm charts feature of Apigee Hybrid is in preview as of today November 13th 2023. I will provide an update once this has gone GA.
+Please see the official Apigee public doc [here](https://cloud.google.com/apigee/docs/hybrid/release-notes#hybrid_v1110) on official release date of helm chart support for Apigee Hybrid
 
 ![Image of screenshot](/media/layout.png)
 
