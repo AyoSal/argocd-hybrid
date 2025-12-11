@@ -10,13 +10,13 @@ k8sCluster:
   region: ""
 
 gcp:
-  region: us-central1
+  region: us-west1
   projectID: ""
   projectIDRuntime: ""
   workloadIdentity:
     enabled: false
 
-controllerNamespace: apigee-system
+controllerNamespace: apigee
 namespace: apigee
 
 apigeeGroupID: 998
