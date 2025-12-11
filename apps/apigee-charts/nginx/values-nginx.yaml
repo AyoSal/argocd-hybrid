@@ -1,6 +1,6 @@
 #nginx Custom Values
 
-replicaCount: 3
+replicaCount: 1
 service:
   type: LoadBalancer
 
