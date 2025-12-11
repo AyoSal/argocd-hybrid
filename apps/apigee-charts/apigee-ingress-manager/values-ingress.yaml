@@ -1,22 +1,22 @@
 #Override Values for Apigee Ingress Manager | Hybrid 1.10.3 on GKE Cluster deployed with ArgoCD and Helm
 
 gcp:
-  region: us-east1
-  projectID: ayos-os-test
+  region: us-west1
+  projectID: hybrid-terraform-471100
 
 k8sCluster:
-  name: argocd-1103
-  region: us-east4 # Must be the closest Google Cloud region to your cluster.
-org: ayos-os-test
+  name: argocd1
+  region: us-west1 # Must be the closest Google Cloud region to your cluster.
+org: hybrid-terraform-471100
 orgscopedUDCA: true
-instanceID: "argocd-helm1102"
+instanceID: "argocd"
 
 imagePullSecrets:
   - name: gcr-cred
 
 nodeSelector:
  # This flag determines if the scheduling passes/fails if the labels are missing.
- requiredForScheduling: true
+ requiredForScheduling: false
  apigeeRuntime:
    key: "cloud.google.com/gke-nodepool"
    value: "apigee-runtime"
