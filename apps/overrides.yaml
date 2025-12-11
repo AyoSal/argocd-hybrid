@@ -1,15 +1,15 @@
 #Hybrid 1.10.2 on GKE Cluster deployed with ArgoCD and Helm
 
 gcp:
-  region: us-east1
-  projectID: ayos-os-test
+  region: us-west1
+  projectID: hybrid-terraform-471100
 
 k8sCluster:
-  name: argocd-helm-1102
-  region: us-east4 # Must be the closest Google Cloud region to your cluster.
-org: ayos-os-test
+  name: argocd1
+  region: us-west1 # Must be the closest Google Cloud region to your cluster.
+org: hybrid-terraform-471100
 orgscopedUDCA: true
-instanceID: "argocd-helm1102"
+instanceID: "argocd"
 
 imagePullSecrets:
   - name: gcr-cred
@@ -25,8 +25,8 @@ nodeSelector:
    value: "apigee-data"
 
 cassandra:
-  hostNetwork: true
-  replicaCount: 3
+  hostNetwork: false
+  replicaCount: 1
 
 cassandra:
   auth:
@@ -42,12 +42,12 @@ hub: gcr.io/apigee-release/hybrid
     # See Multi-region deployment: Prerequisites
 
 virtualhosts:
-  - name: argocd-grp
+  - name: argo-grp
     minTLSProtocolVersion: "1.2"
     selector:
       app: apigee-ingressgateway
       ingress_name: argocd-ingress
-    sslSecret: hybrid-cert-secret
+    sslSecret: apigee-tls
 
 
 ingressGateways:
@@ -66,7 +66,7 @@ apigeeIngressGateway:
     pullPolicy: IfNotPresent  
 
 envs:
-- name: argocd-env
+- name: argo-env
   serviceAccountSecretRefs:
     synchronizer: "hybrid-secret-for-serviceaccount"
     udca: "hybrid-secret-for-serviceaccount"
