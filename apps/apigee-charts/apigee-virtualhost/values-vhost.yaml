@@ -1,13 +1,13 @@
 # Override Values for Apigee VirtualHost | Hybrid 1.10.3 on GKE Cluster deployed with ArgoCD and Helm
 
 gcp:
-  region: us-east1
-  projectID: ayos-os-test
+  region: us-west1
+  projectID: hybrid-terraform-471100
 
 k8sCluster:
   name: argocd-1103
-  region: us-east4 # Must be the closest Google Cloud region to your cluster.
-org: ayos-os-test
+  region: us-west1 # Must be the closest Google Cloud region to your cluster.
+org: hybrid-terraform-471100
 orgscopedUDCA: true
 instanceID: "argocd-helm1102"
 
@@ -27,7 +27,7 @@ nodeSelector:
 hub: gcr.io/apigee-release/hybrid
 
 virtualhosts:
-  - name: argocd-grp
+  - name: argo-grp
     minTLSProtocolVersion: "1.2"
     selector:
       app: apigee-ingressgateway
