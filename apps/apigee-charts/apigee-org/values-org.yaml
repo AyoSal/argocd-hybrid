@@ -1,6 +1,6 @@
 #Override Values for Apigee Org | Hybrid 1.10.3 on GKE Cluster deployed with ArgoCD and Helm
 gcp:
-  region: us-east1
+  region: us-west1
   projectID: hybrid-terraform-471100
 
 k8sCluster:
