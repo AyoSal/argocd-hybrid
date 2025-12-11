@@ -2,7 +2,7 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-controllerNamespace: apigee-system
+controllerNamespace: apigee
 namespace: apigee
 
 #
@@ -15,7 +15,7 @@ apigeeGroupID: 998
 apigeeUserID: 999
 
 nodeSelector:
-  requiredForScheduling: true
+  requiredForScheduling: false
   apigeeRuntime:
     key: "cloud.google.com/gke-nodepool"
     value: "apigee-runtime"
