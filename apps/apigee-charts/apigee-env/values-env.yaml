@@ -28,9 +28,9 @@ hub: gcr.io/apigee-release/hybrid
 envs:
 - name: argo-env
   serviceAccountSecretRefs:
-    synchronizer: "apigee-sa"
-    udca: "apigee-sa"
-    runtime: "apigee-sa"
+    synchronizer: "hybrid-secret-for-serviceaccount"
+    udca: "hybrid-secret-for-serviceaccount"
+    runtime: "hybrid-secret-for-serviceaccount"
 
 
 synchronizer:
@@ -42,6 +42,6 @@ runtime:
   replicaCountMax: '2'
 
 udca:
-  serviceAccountRef: "apigee-sa"
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"
   hostNetwork: false
 
