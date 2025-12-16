@@ -5,19 +5,12 @@ gcp:
   projectID: hybrid-terraform-471100
 
 k8sCluster:
-<<<<<<< HEAD
-  name: argocd1
   region: us-west1 # Must be the closest Google Cloud region to your cluster.
-org: hybrid-terraform-471100
-orgscopedUDCA: true
-instanceID: "argocd"
-=======
   name: argocd-test
-  region: us-west1 # Must be the closest Google Cloud region to your cluster.
 org: hybrid-terraform-471100
 orgscopedUDCA: true
 instanceID: "argocd1"
->>>>>>> 1ed8a88 (changes)
+
 
 imagePullSecrets:
   - name: gcr-cred
@@ -36,9 +29,9 @@ cassandra:
   hostNetwork: false
   replicaCount: 1
 
-cassandra:
-  auth:
-    secretProviderClass: apigee-cassandra-auth-spc  # The name of the SecretProviderClass created in spc.yaml.
+#cassandra:
+#  auth:
+#    secretProviderClass: apigee-cassandra-auth-spc  # The name of the SecretProviderClass created in spc.yaml.
 
 hub: gcr.io/apigee-release/hybrid
     #  forceDelete: true
@@ -55,7 +48,7 @@ virtualhosts:
     selector:
       app: apigee-ingressgateway
       ingress_name: argocd-ingress
-    sslSecret: apigee-tls
+    sslSecret: hybrid-cert-secret
 
 
 ingressGateways:
