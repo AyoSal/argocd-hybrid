@@ -5,19 +5,13 @@ gcp:
   projectID: hybrid-terraform-471100
 
 k8sCluster:
-<<<<<<< HEAD
   name: argocd-test
   region: us-west1 # Must be the closest Google Cloud region to your cluster.
-org: hybrid-terraform-471100
-orgscopedUDCA: true
-instanceID: "argocd1"
-=======
   name: argo-test
   region: us-west1 # Must be the closest Google Cloud region to your cluster.
 org: hybrid-terraform-471100
 orgscopedUDCA: true
 instanceID: "argo1"
->>>>>>> 1ed8a88 (changes)
 
 imagePullSecrets:
   - name: gcr-cred

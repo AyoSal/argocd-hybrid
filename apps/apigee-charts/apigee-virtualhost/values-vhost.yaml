@@ -5,11 +5,7 @@ gcp:
   projectID: hybrid-terraform-471100
 
 k8sCluster:
-<<<<<<< HEAD
-  name: argocd-1103
-=======
   name: argo-test
->>>>>>> 1ed8a88 (changes)
   region: us-west1 # Must be the closest Google Cloud region to your cluster.
 org: hybrid-terraform-471100
 orgscopedUDCA: true

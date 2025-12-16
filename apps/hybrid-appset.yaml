@@ -42,7 +42,7 @@ spec:
       project: default
       source:
         repoURL: https://github.com/AyoSal/argocd-hybrid.git
-        targetRevision: HEAD
+        targetRevision: temp-fix
         path: 'charts/{{chart}}'
         helm:
           valueFiles:

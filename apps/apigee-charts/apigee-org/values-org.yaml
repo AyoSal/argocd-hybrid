@@ -8,11 +8,7 @@ k8sCluster:
   region: us-west1 # Must be the closest Google Cloud region to your cluster.
 org: hybrid-terraform-471100
 orgscopedUDCA: true
-<<<<<<< HEAD
 instanceID: "argocd"
-=======
-instanceID: "argo1"
->>>>>>> 1ed8a88 (changes)
 
 imagePullSecrets:
   - name: gcr-cred
