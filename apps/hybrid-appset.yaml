@@ -1,0 +1,59 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: hybridset
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - chart: apigee-operator
+            valuesFile: values-ops.yaml
+            wave: "1"
+          - chart: apigee-datastore
+            valuesFile: values-ds.yaml
+            wave: "2"
+          - chart: apigee-telemetry
+            valuesFile: values-telemetry.yaml
+            wave: "3"
+          - chart: apigee-redis
+            valuesFile: values-redis.yaml
+            wave: "3"
+          - chart: apigee-ingress-manager
+            valuesFile: values-ingress.yaml
+            wave: "4"
+          - chart: apigee-org
+            valuesFile: values-org.yaml
+            wave: "4"
+          - chart: apigee-env
+            valuesFile: values-env.yaml
+            wave: "5"
+          - chart: apigee-virtualhost
+            valuesFile: values-vhost.yaml
+            wave: "6"
+  
+  template:
+    metadata:
+      name: '{{chart}}'
+      annotations:
+        # This controls the sequence. Lower numbers run first.
+        argocd.argoproj.io/sync-wave: '{{wave}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/AyoSal/argocd-hybrid.git
+        targetRevision: HEAD
+        path: 'charts/{{chart}}'
+        helm:
+          valueFiles:
+            - '{{valuesFile}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'apigee'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - ServerSideApply=true
