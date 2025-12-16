@@ -9,7 +9,7 @@ k8sCluster:
   region: us-west1 # Must be the closest Google Cloud region to your cluster.
 org: hybrid-terraform-471100
 orgscopedUDCA: true
-instanceID: "argocd-helm1102"
+instanceID: "argo1"
 
 imagePullSecrets:
   - name: gcr-cred
@@ -28,9 +28,9 @@ hub: gcr.io/apigee-release/hybrid
 envs:
 - name: argo-env
   serviceAccountSecretRefs:
-    synchronizer: "hybrid-secret-for-serviceaccount"
-    udca: "hybrid-secret-for-serviceaccount"
-    runtime: "hybrid-secret-for-serviceaccount"
+    synchronizer: "apigee-sa"
+    udca: "apigee-sa"
+    runtime: "apigee-sa"
 
 
 synchronizer:
@@ -42,6 +42,6 @@ runtime:
   replicaCountMax: '2'
 
 udca:
-  serviceAccountRef: "hybrid-secret-for-serviceaccount"
-  hostNetwork: true
+  serviceAccountRef: "apigee-sa"
+  hostNetwork: false
 

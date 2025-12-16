@@ -5,11 +5,15 @@ gcp:
   projectID: hybrid-terraform-471100
 
 k8sCluster:
+<<<<<<< HEAD
   name: argocd-1103
+=======
+  name: argo-test
+>>>>>>> 1ed8a88 (changes)
   region: us-west1 # Must be the closest Google Cloud region to your cluster.
 org: hybrid-terraform-471100
 orgscopedUDCA: true
-instanceID: "argocd-helm1102"
+instanceID: "argo1"
 
 imagePullSecrets:
   - name: gcr-cred
@@ -32,7 +36,7 @@ virtualhosts:
     selector:
       app: apigee-ingressgateway
       ingress_name: argocd-ingress
-    sslSecret: hybrid-cert-secret
+    sslSecret: apigee-tls
 
 ingressGateways:
   - name: argocd-ingress
@@ -51,12 +55,12 @@ istiod:
 
 
 metrics:
-  serviceAccountRef: "hybrid-secret-for-serviceaccount"
-  hostNetwork: true
+  serviceAccountRef: "apigee-sa"
+  hostNetwork: false
 
 logger:
   enabled: false
         # Set to false to disable logger for GKE installations.
         # Set to true for all platforms other than GKE.
         # See apigee-logger in Service accounts and roles used by hybrid components.
-  serviceAccountRef: "hybrid-secret-for-serviceaccount"
+  serviceAccountRef: "apigee-sa"

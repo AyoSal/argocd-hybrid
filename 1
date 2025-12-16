@@ -1,0 +1,100 @@
+# Please edit the object below. Lines beginning with a '#' will be ignored,
+# and an empty file will abort the edit. If an error occurs while saving this file will be
+# reopened with the relevant failures.
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    argocd.argoproj.io/tracking-id: nginx:apps/Deployment:apigee/nginx
+    deployment.kubernetes.io/revision: "1"
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{"argocd.argoproj.io/tracking-id":"nginx:apps/Deployment:apigee/nginx"},"labels":{"app.kubernetes.io/instance":"nginx","app.kubernetes.io/managed-by":"Helm","app.kubernetes.io/name":"nginx","app.kubernetes.io/version":"1.16.0","helm.sh/chart":"nginx-0.1.0"},"name":"nginx","namespace":"apigee"},"spec":{"replicas":2,"selector":{"matchLabels":{"app.kubernetes.io/instance":"nginx","app.kubernetes.io/name":"nginx"}},"template":{"metadata":{"labels":{"app.kubernetes.io/instance":"nginx","app.kubernetes.io/name":"nginx"}},"spec":{"containers":[{"image":"nginx:1.16.0","imagePullPolicy":"IfNotPresent","livenessProbe":{"httpGet":{"path":"/","port":"http"}},"name":"nginx","ports":[{"containerPort":80,"name":"http","protocol":"TCP"}],"readinessProbe":{"httpGet":{"path":"/","port":"http"}},"resources":{},"securityContext":{}}],"securityContext":{},"serviceAccountName":"nginx"}}}}
+  creationTimestamp: "2025-12-08T17:47:49Z"
+  generation: 1
+  labels:
+    app.kubernetes.io/instance: nginx
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx
+    app.kubernetes.io/version: 1.16.0
+    helm.sh/chart: nginx-0.1.0
+  name: nginx
+  namespace: apigee
+  resourceVersion: "1765216169252239000"
+  uid: ecc9c8c3-aec2-4b9c-8e67-93ad735c282d
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 0
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: nginx
+      app.kubernetes.io/name: nginx
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app.kubernetes.io/instance: nginx
+        app.kubernetes.io/name: nginx
+    spec:
+      containers:
+      - image: nginx:1.16.0
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: http
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: nginx
+        ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: http
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources: {}
+        securityContext: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: nginx
+      serviceAccountName: nginx
+      terminationGracePeriodSeconds: 30
+status:
+  availableReplicas: 2
+  conditions:
+  - lastTransitionTime: "2025-12-08T17:47:49Z"
+    lastUpdateTime: "2025-12-08T17:48:34Z"
+    message: ReplicaSet "nginx-647764c7d" has successfully progressed.
+    reason: NewReplicaSetAvailable
+    status: "True"
+    type: Progressing
+  - lastTransitionTime: "2025-12-08T17:49:29Z"
+    lastUpdateTime: "2025-12-08T17:49:29Z"
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: "True"
+    type: Available
+  observedGeneration: 1
+  readyReplicas: 2
+  replicas: 2
+  updatedReplicas: 2
