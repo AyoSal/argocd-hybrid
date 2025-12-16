@@ -32,7 +32,7 @@ virtualhosts:
     selector:
       app: apigee-ingressgateway
       ingress_name: argocd-ingress
-    sslSecret: apigee-tls
+    sslSecret: hybrid-cert-secret
 
 ingressGateways:
   - name: argocd-ingress
