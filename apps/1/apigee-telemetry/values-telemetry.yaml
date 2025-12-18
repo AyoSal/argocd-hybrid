@@ -26,7 +26,7 @@ nodeSelector:
 
 hub: gcr.io/apigee-release/hybrid
 metrics:
-  serviceAccountRef: "apigee-sa"
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"
   hostNetwork: false
 
 logger:
@@ -34,4 +34,4 @@ logger:
         # Set to false to disable logger for GKE installations.
         # Set to true for all platforms other than GKE.
         # See apigee-logger in Service accounts and roles used by hybrid components.
-  serviceAccountRef: "apigee-sa"
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"
