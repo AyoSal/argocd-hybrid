@@ -28,11 +28,10 @@ hub: gcr.io/apigee-release/hybrid
 
 virtualhosts:
   - name: argo-grp
-    minTLSProtocolVersion: "1.2"
     selector:
       app: apigee-ingressgateway
       ingress_name: argocd-ingress
-    sslSecret: apigee-tls
+    sslSecret: hybrid-cert-secret
 
 ingressGateways:
   - name: argocd-ingress
