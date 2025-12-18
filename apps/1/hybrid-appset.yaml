@@ -28,9 +28,11 @@ spec:
           - chart: apigee-env
             valuesFile: values-env.yaml
             wave: "7"
+            envName: "argo-env"  #Apigee Environment Name
           - chart: apigee-virtualhost
             valuesFile: values-vhost.yaml
             wave: "8"
+            envgroupName: "argo-grp"
   
   template:
     metadata:
