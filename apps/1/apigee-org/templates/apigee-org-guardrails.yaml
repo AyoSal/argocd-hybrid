@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: apigee-hybrid-helm-guardrail-org
+  namespace: {{ include "namespace" . }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    {{- with .Values.watcher.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  labels:
+    app: apigee-hybrid-helm-guardrail
+spec:
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.nodeSelector }}
+  affinity:
+    {{- include "nodeAffinity.runtime" . | nindent 4 }}
+  {{- end }}
+  {{- $t := default .Values.tolerations .Values.guardrails.tolerations }}
+  {{- with $t }}
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: {{ .Values.apigeeUserID }}
+    runAsGroup: {{ .Values.apigeeGroupID }}
+  containers:
+    - name: apigee-hybrid-helm-guardrail-container
+      image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.guardrails "n" "apigee-watcher") }}
+      imagePullPolicy: {{ .Values.guardrails.image.pullPolicy }}
+      command: ['/helmguardrails']
+      env:
+      - name: COMPONENT
+        value: "org"
+      - name: CHECKPOINT
+      {{- if .Values.checkpoint }}
+        value: {{ .Values.checkpoint }}
+      {{- else }}
+        value: "pre-install"
+      {{- end }}
+      - name: APIGEE_ENDPOINT
+        value: {{ .Values.contractProvider}}
+      {{- if .Values.httpProxy }}
+      {{- if .Values.httpProxy.username }}
+      - name: {{ lower .Values.httpProxy.scheme }}_proxy
+        value: {{ lower .Values.httpProxy.scheme }}://{{ quote .Values.httpProxy.username }}:{{ quote .Values.httpProxy.password }}@{{ .Values.httpProxy.host }}:{{ .Values.httpProxy.port }}
+      {{- else }}
+      - name: {{ lower .Values.httpProxy.scheme }}_proxy
+        value: {{ lower .Values.httpProxy.scheme }}://{{ .Values.httpProxy.host }}:{{ .Values.httpProxy.port }}
+      {{- end }}
+      {{- end }}
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+          - ALL
+      {{- with .Values.guardrails.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0

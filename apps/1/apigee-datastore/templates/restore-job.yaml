@@ -1,0 +1,216 @@
+{{- $dsName := "default" }}
+{{- $restore := "apigee-cassandra-restore"}}
+{{- $localSecretVolumeName := "cassandra-creds"}}
+{{- $localSecretPath := "/opt/apigee/secret" }}
+{{- $adminUserKey := "admin.user" }}
+{{- $adminPassKey := "admin.password" }}
+{{- $essSecrets := "apigee-external-secrets" }}
+{{- $essSecretsPath := "/opt/apigee/externalsecrets" }}
+{{- $essAdminUserKey := "adminUsername" }}
+{{- $essAdminPassKey := "adminPassword" }}
+{{- $sshKeyPath := "/var/secrets/keys" }}
+{{- $sshKeyFilename := "key" }}
+
+
+{{- $csiProvider := "CSI" }}
+{{- $gcsProvider := "GCP" }}
+{{- $sshProvider := "HYBRID" }}
+{{- $supportedProviders := list $csiProvider $gcsProvider $sshProvider }}
+
+{{- if .Values.cassandra.restore.enabled }}
+{{- $cassServiceName := include "cassandra.svc" . }}
+{{- $clientImg := include "container.image" (dict "hub" .Values.hub "o" .Values.cassandra.restore "n" "apigee-hybrid-cassandra-client") }}
+{{- $provider := default $gcsProvider .Values.cassandra.restore.cloudProvider }}
+{{- if not (has $provider $supportedProviders) }}
+  {{- fail (printf "Detected an unsupported restore provider %q. Please check the \"cassandra.restore.cloudProvider\" field in your overrides file.  Supported providers: %+q" $provider $supportedProviders) }}
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $restore }}
+  namespace: {{ include "namespace" . }}
+spec:
+  template:
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      affinity:
+        {{- include "nodeAffinity.runtime" . | nindent 8 }}
+      {{- end }}
+      {{- $t := default .Values.tolerations .Values.cassandra.restore.tolerations }}
+      {{- with $t }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.apigeeUserID }}
+        runAsGroup: {{ .Values.apigeeGroupID }}
+        {{- if .Values.cassandra.restore.keyFile }}
+        fsGroup: {{ .Values.apigeeGroupID }}
+        {{- end }}
+      serviceAccountName: {{ $restore }}-sa
+      initContainers:
+      - name: check-user
+        image: {{ $clientImg | quote }}
+        imagePullPolicy: {{ .Values.cassandra.auth.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        command: [
+          'bash',
+          '-c',
+          'export CASS_USERNAME=$(<${CASSANDRA_ADMIN_USERNAME_PATH});export CASS_PASSWORD=$(<${CASSANDRA_ADMIN_PASSWORD_PATH});until cqlsh {{ $cassServiceName }} -u ${CASS_USERNAME} -p ${CASS_PASSWORD} --ssl -e "select * from system_schema.keyspaces;" &> /dev/null; do sleep 5; echo "waiting for roles to be created"; done;' ]
+        env:
+        {{- if .Values.cassandra.auth.secretProviderClass }}
+        - name: CASSANDRA_ADMIN_USERNAME_PATH
+          value: "{{ $essSecretsPath }}/{{ $essAdminUserKey }}"
+        - name: CASSANDRA_ADMIN_PASSWORD_PATH
+          value: "{{ $essSecretsPath }}/{{ $essAdminPassKey }}"
+        {{- else }}
+        - name: CASSANDRA_ADMIN_USERNAME_PATH
+          value: "{{ $localSecretPath }}/{{ $adminUserKey }}"
+        - name: CASSANDRA_ADMIN_PASSWORD_PATH
+          value: "{{ $localSecretPath }}/{{ $adminPassKey }}"
+        {{- end }}
+        volumeMounts:
+        - name: tls-volume
+          mountPath: "/opt/apigee/ssl"
+          readOnly: true
+        {{- if .Values.cassandra.auth.secretProviderClass }}
+          {{/* Prefer External Secret Store if set. */}}
+        - name: {{ $essSecrets | quote }}
+          mountPath: {{ $essSecretsPath | quote }}
+          readOnly: true
+        {{- else }}
+        - name: {{ $localSecretVolumeName | quote }}
+          mountPath: {{ $localSecretPath | quote }}
+          readOnly: true
+        {{- end }}
+      containers:
+      - name: {{ $restore }}
+        command:
+        - "/opt/apigee/bnr"
+        image: {{ $clientImg }}
+        imagePullPolicy: {{ .Values.cassandra.restore.image.pullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          privileged: false
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: APIGEE_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CASSANDRA_CLUSTER_NAME
+          value: {{ .Values.cassandra.clusterName | quote}}
+        - name: CASSANDRA_DC
+          value: {{ .Values.cassandra.datacenter | quote }}
+          {{/*
+          Possible values:
+          * "CSI" (Preferred). Restore Cassandra PersistentVolumeClaims from CSI
+            VolumeSnapshots. Doc: https://kubernetes.io/docs/concepts/storage/volume-snapshots/
+          * "GCP" (Default). Restore Cassandra cluster data from a backup file
+            stored on the Google Cloud Storage bucket.
+          * "HYBRID". Restore Cassandra cluster data from a backup file stored
+            on the remote SSH server.
+          */}}
+        - name: APIGEE_CLOUDPROVIDER
+          value: {{ .Values.cassandra.restore.cloudProvider | quote }}
+          {{- if .Values.cassandra.restore.dbStorageBucket }}
+          {{/*
+          Google Cloud Storage bucket name from which to download the backup
+          archive for the restoration. Used only if GCS restore
+          (cloudProvider: "GCP") is set.
+          */}}
+        - name: DBSTORAGE_BUCKET
+          value: {{ .Values.cassandra.restore.dbStorageBucket | quote }}
+          {{- end }}
+        - name: BACKUP_SNAPSHOT_TIMESTAMP
+          value: {{ required "Snapshot timestamp is required for a restore. Please set it in your overrides file under \"cassandra.restore.snapshotTimestamp\"" (.Values.cassandra.restore.snapshotTimestamp | quote) }}
+          {{/*
+          MODE and ACTION must always be "client" and "restore", respectively,
+          for the restore job.
+          */}}
+        - name: MODE
+          value: "client"
+        - name: ACTION
+          value: "restore"
+        {{- if .Values.cassandra.restore.server }}
+          {{/*
+          IP address or hostname of the SSH server from which to download the
+          backup archive for the restoration. Used only if SSH restore
+          (cloudProvider: "HYBRID") is set.
+          */}}
+        - name: BACKUP_SERVER_IP
+          value: {{ .Values.cassandra.restore.server | quote }}
+        {{- end }}
+        {{- if .Values.cassandra.restore.storageDirectory }}
+          {{/*
+          The path to a directory on the SSH server that contains the backup
+          file for the restoration. Used only if SSH restore
+          (cloudProvider: "HYBRID") is set.
+          */}}
+        - name: BACKUP_STORAGE_DIR
+          value: {{ .Values.cassandra.restore.storageDirectory | quote }}
+        {{- end }}
+          {{/*
+          Private key to establish SSH connection. Used only if SSH restore
+          (cloudProvider: "HYBRID") is set.
+          */}}
+        - name: BACKUP_KEY_FILE
+          value: "{{ $sshKeyPath }}/{{ $sshKeyFilename }}"
+        volumeMounts:
+        - name: tls-volume
+          mountPath: "/opt/apigee/ssl"
+          readOnly: true
+        - name: {{ $restore }}-key-file
+          mountPath: {{ $sshKeyPath | quote }}
+          readOnly: true
+      volumes:
+      - name: {{ $restore }}-key-file
+        secret:
+          defaultMode: 0400
+          {{- if .Values.cassandra.restore.keyFileRef }}
+          secretName: {{ .Values.cassandra.restore.keyFileRef }}
+          {{- else }}
+          secretName: {{ $restore }}-key-file
+          {{- end }}
+          optional: true
+      - name: tls-volume
+        secret:
+          secretName: {{ $restore }}-tls
+      {{- if .Values.cassandra.auth.secretProviderClass }}
+      - name: {{ $essSecrets | quote }}
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: {{ .Values.cassandra.auth.secretProviderClass | quote }}
+      {{- else }}
+      - name: {{ $localSecretVolumeName }}
+        secret:
+          {{- if .Values.cassandra.auth.secret }}
+          secretName: {{ .Values.cassandra.auth.secret }}
+          {{- else }}
+          secretName: apigee-datastore-{{ $dsName }}-creds
+          {{- end }}
+          items:
+          - key: {{ $adminUserKey | quote }}
+            path: {{ $adminUserKey | quote }}
+          - key: {{ $adminPassKey | quote }}
+            path: {{ $adminPassKey | quote }}
+      {{- end }}
+      restartPolicy: OnFailure
+---
+{{- end }}

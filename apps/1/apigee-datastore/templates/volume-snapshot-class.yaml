@@ -1,0 +1,68 @@
+{{/* Create VolumeSnapshotClass only if CSI backup or restore is enabled. */}}
+{{- if and (or .Values.cassandra.backup.enabled .Values.cassandra.restore.enabled) (eq "CSI" .Values.cassandra.backup.cloudProvider) }}
+{{- $vscName := "hybrid-snapshot-v3" }}
+{{- $storageClass := dict }}
+{{- $defaultSuffix := "" }}
+{{/* If cassandra.storage.storageclass is defined in the overrides file. */}}
+{{- if and .Values.cassandra.storage .Values.cassandra.storage.storageclass }}
+  {{/* Lookup StorageClass with a cassandra.storage.storageclass name. */}}
+  {{- $storageClass = (lookup "storage.k8s.io/v1" "StorageClass" "" .Values.cassandra.storage.storageclass) }}
+  {{- if empty $storageClass }}
+    {{/*
+    Fail if StorageClass with a cassandra.storage.storageclass name does not
+    exist in the Kubernetes cluster. We cannot create a VolumeSnapshotClass
+    using an invalid StorageClass name.
+    */}}
+    {{- fail (printf "Storage class %q does not exist. Please check your storage class configuration" .Values.cassandra.storage.storageclass) }}
+  {{- end }}
+{{- else }}
+  {{/*
+  Go through all StorageClasses to find the one that is marked as default
+  if the overrides file does not define cassandra.storage.storageclass.
+  */}}
+  {{- range $_, $sc := (lookup "storage.k8s.io/v1" "StorageClass" "" "").items }}
+    {{- if eq "true" (get (default (dict) $sc.metadata.annotations) "storageclass.kubernetes.io/is-default-class") }}
+      {{- if $storageClass }}
+        {{/*
+        Fail if more than one StorageClass is marked as default since we do
+        not know which one to pick as default.
+        */}}
+        {{- fail "Found more than one default storage class. Please check your storage class configuration" }}
+      {{- end }}
+      {{- $storageClass = $sc }}
+    {{- end }}
+  {{- end }}
+  {{- if empty $storageClass }}
+    {{- fail "Cannot find default storage class. Please mark one as default or specify storage class name in your overrides file under \"cassandra.storage.storageclass\"" }}
+  {{- end }}
+  {{- $defaultSuffix = " (default)" }}
+{{- end }}
+{{- if empty $storageClass.provisioner }}
+  {{- fail (printf "Storage class %q%s does not specify a storage provisioner. Please check your storage class configuration" $storageClass.metadata.name $defaultSuffix) }}
+{{- end }}
+{{- $csiDriver := dict }}
+{{/* The name of the CSIDriver cannot contain "/" symbol. */}}
+{{- if not (contains "/" $storageClass.provisioner) }}
+  {{- $csiDriver = (lookup "storage.k8s.io/v1" "CSIDriver" "" $storageClass.provisioner) }}
+{{- end }}
+{{/*
+Fail if CSIDriver does not exist. In that case, the provisioner from the
+resulting storage class does not support CSI.
+*/}}
+{{- if empty $csiDriver }}
+  {{- fail (printf "Storage class %q%s uses a non-CSI provisioner %q, which cannot be used for CSI backup and restore. Please check your storage class configuration" $storageClass.metadata.name $defaultSuffix $storageClass.provisioner) }}
+{{- end }}
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: {{ $vscName }}
+  annotations:
+    {{/*
+    Do not delete the VolumeSnapshotClass.
+    https://helm.sh/docs/howto/charts_tips_and_tricks/#tell-helm-not-to-uninstall-a-resource
+    */}}
+    helm.sh/resource-policy: keep
+driver: {{ $csiDriver.metadata.name }}
+deletionPolicy: Retain
+---
+{{- end }}

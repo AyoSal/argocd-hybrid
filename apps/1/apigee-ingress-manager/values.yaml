@@ -1,0 +1,78 @@
+# Default values for apigee-ingress-manager.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+contractProvider: https://apigee.googleapis.com
+namespace: apigee
+apigeeGroupID: 998
+apigeeUserID: 999
+nodeSelector:
+  requiredForScheduling: true
+  apigeeRuntime:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-runtime"
+  apigeeData:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-data"
+# Apigee istiod.
+istiod:
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-asm-istiod"
+    tag: "1.15.1"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1024Mi
+    requests:
+      cpu: 200m
+      memory: 512Mi
+  accessLogFile: '/dev/stdout'
+  accessLogFormat: '{"start_time":"%START_TIME%","remote_address":"%DOWNSTREAM_DIRECT_REMOTE_ADDRESS%","user_agent":"%REQ(USER-AGENT)%","host":"%REQ(:AUTHORITY)%","request":"%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%","request_time":"%DURATION%","status":"%RESPONSE_CODE%","status_details":"%RESPONSE_CODE_DETAILS%","bytes_received":"%BYTES_RECEIVED%","bytes_sent":"%BYTES_SENT%","upstream_address":"%UPSTREAM_HOST%","upstream_response_flags":"%RESPONSE_FLAGS%","upstream_response_time":"%RESPONSE_DURATION%","upstream_service_time":"%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%","upstream_cluster":"%UPSTREAM_CLUSTER%","x_forwarded_for":"%REQ(X-FORWARDED-FOR)%","request_method":"%REQ(:METHOD)%","request_path":"%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%","request_protocol":"%PROTOCOL%","tls_protocol":"%DOWNSTREAM_TLS_VERSION%","request_id":"%REQ(X-REQUEST-ID)%","sni_host":"%REQUESTED_SERVER_NAME%","apigee_dynamic_data":"%DYNAMIC_METADATA(envoy.lua)%"}'
+  healthCheckUserAgents:
+    - "GoogleStackdriverMonitoring-UptimeChecks(https://cloud.google.com/monitoring)"
+    - "Edge Health Probe"
+    # Lets always use the tag so its easy to debug know which change helm is been validated
+    # Apigee Operators controller
+ao:
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-operators"
+    tag: "1.15.1"
+    pullPolicy: IfNotPresent
+  args:
+    loglevel: info
+    enableWebhooks: true
+    enableControllers: true
+    enableAPIClient: true
+    disableIstioConfigInAPIServer: true
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1024Mi
+    requests:
+      cpu: 400m
+      memory: 512Mi
+# kube rbac proxy
+kubeRBACProxy:
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-kube-rbac-proxy"
+    tag: "1.15.1"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 500m
+      memory: 128Mi
+    requests:
+      cpu: 5m
+      memory: 64Mi
+# Lets always use the tag so its easy to debug know which change helm is been validated
+# Apigee Guardrails
+guardrails:
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-watcher"
+    tag: "1.15.1"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 500m
+      memory: 64Mi

@@ -1,0 +1,422 @@
+{{- template "helmVersionCheck" . }}
+{{- $telemetryName := "apigee-telemetry" -}}
+{{- $metricsName := "apigee-metrics" -}}
+{{- $oTelCollectorName := "apigee-open-telemetry-collector" }}
+{{- $prometheusAppName := "apigee-prometheus-app" -}}
+{{- $prometheusProxyName := "apigee-prometheus-proxy" -}}
+{{- $prometheusAdapterName := "apigee-prometheus-adapter" -}}
+{{- $prometheusAgg := "apigee-prometheus-agg" -}}
+{{- $sdExporterName := "apigee-stackdriver-exporter" -}}
+{{- $fluentdLoggerName := "apigee-logger" -}}
+{{- $metricAdapterSA := "apigee-metrics-adapter" -}}
+{{- $wiAnnotation := "apigee.cloud.google.com/wi-config-checksum" -}}
+{{- $saAnnotation := "apigee.cloud.google.com/sa-config-checksum" -}}
+{{- $generatedName := include "orgScopeEncodedName" (dict "name" .Values.org) -}}
+kind: ApigeeTelemetry
+apiVersion: apigee.cloud.google.com/v1alpha2
+metadata:
+  {{- if .Values.multiOrgCluster }}
+  name: "{{ $generatedName }}"
+  {{- else }}
+  name: "{{ $telemetryName }}"
+  {{- end }}
+  namespace: {{ include "namespace" . }}
+  labels:
+    apigee.cloud.google.com/platform: apigee
+release:
+  forceUpdate: true
+spec:
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  clusterName: "{{ .Values.k8sCluster.name }}"
+  clusterRegion: "{{ .Values.k8sCluster.region }}"
+  gcpProjectID: "{{ .Values.gcp.projectID }}"
+  organizationName: "{{ .Values.org }}"
+  {{- if .Values.httpProxy }}
+  httpForwardProxy:
+    scheme: {{ upper (required "httpProxy.scheme is required. Supported value is http or https." .Values.httpProxy.scheme) }}
+    host: {{ (required "httpProxy.host is required." .Values.httpProxy.host) }}
+    port: {{ .Values.httpProxy.port }}
+    {{- if .Values.httpProxy.username }}
+    username: {{ quote .Values.httpProxy.username }}
+    {{- end -}}
+    {{- if .Values.httpProxy.password }}
+    password: {{ quote .Values.httpProxy.password }}
+    {{- end -}}
+  {{- end }}
+  customAutoscaling:
+    enabled: {{ .Values.customAutoscaling.enabled }}
+  metricsExport:
+    enabled: {{ .Values.metrics.enabled }}
+    defaultMetricsProjectID: "{{ .Values.gcp.projectID }}"
+    appMetricsProjectID: "{{ .Values.gcp.projectID }}"
+    proxyMetricsProjectID: "{{ .Values.gcp.projectID }}"
+    collectorProjectID: "{{ .Values.gcp.projectID }}"
+    stackdriverAPIEndpoint: "{{ .Values.metrics.sdSidecar.stackdriverApiAddress }}"
+    serviceConfigName: apigee.googleapis.com
+    disablePrometheusPipeline: {{ .Values.metrics.disablePrometheusPipeline }}
+  containerLogsExport:
+    enabled: {{ .Values.logger.enabled }}
+    projectID: "{{ .Values.gcp.projectID }}"
+  accessLogsExport:
+    enabled: false
+  components:
+    {{- if .Values.metrics.enabled }}
+    collector:
+      {{- if .Values.gcp.workloadIdentity.enabled }}
+      podServiceAccountName: {{ include "metricsSAName" . }}
+      {{- else }}
+      {{- if .Values.serviceAccountSecretProviderClass }}
+      appServiceAccountSecretProviderClass: {{ .Values.serviceAccountSecretProviderClass }}
+      {{- else if .Values.metrics.serviceAccountRef }}
+      appServiceAccountSecretName: "{{ .Values.metrics.serviceAccountRef }}"
+      {{- else }}
+      appServiceAccountSecretName: {{ include "metricsGSAName" . }}
+      {{- end -}}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.both" . | nindent 6 }}
+      {{- end }}
+      {{- $t := default .Values.tolerations .Values.metrics.tolerations }}
+      {{- with  $t }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- if .Values.metrics.serviceAccountPath }}
+        {{ $saAnnotation }}: {{ include "tryFileContent.get" (dict "files" $.Files "f" (required "metrics.serviceAccountPath is required!!" .Values.metrics.serviceAccountPath)) | sha256sum }}
+        {{- end -}}
+        {{- $annotations := .Values.metrics.annotations | default dict }}
+        {{- $collectorAnnotations := .Values.metrics.collector.annotations | default dict }}
+        {{- $mergedAnnotations := mergeOverwrite $annotations $collectorAnnotations }}
+        {{- with $mergedAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      configOverride:
+        enable-prom-var-syntax-v2: !!str {{ .Values.metrics.collector.usePromVarSyntaxV2 }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      {{- if include "fwi.enabled" . }}
+      volumes:
+        - name: fwi-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: {{ .Values.gcp.federatedWorkloadIdentity.audience }}
+                  expirationSeconds: {{ .Values.gcp.federatedWorkloadIdentity.tokenExpiration }}
+                  path: {{ include "fwi.tokenFile" . }}
+      {{- end }}
+      containers:
+      - name: "{{ $oTelCollectorName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.metrics.collector "n" "apigee-open-telemetry-collector") }}
+        imagePullPolicy: {{ .Values.metrics.collector.image.pullPolicy }}
+        {{- if and .Values.metrics.collector .Values.metrics.collector.envVars }}
+        env:
+        {{- range $k, $v := .Values.metrics.collector.envVars }}
+        - name: "{{ $k }}"
+          value: "{{ $v }}"
+        {{- end }}
+        {{- end }}
+        {{- with .Values.metrics.collector.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.metrics.collector.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.metrics.collector.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- if include "fwi.enabled" . }}
+        volumeMounts:
+        - name: fwi-token
+          mountPath: {{ include "fwi.tokenPath" . }}
+          readOnly: true
+        {{- end }}
+    metricsProxy:
+      {{- if .Values.gcp.workloadIdentity.enabled }}
+      podServiceAccountName: {{ include "metricsSAName" . }}
+      {{- else }}
+      {{- if .Values.serviceAccountSecretProviderClass }}
+      appServiceAccountSecretProviderClass: {{ .Values.serviceAccountSecretProviderClass }}
+      {{- else if .Values.metrics.serviceAccountRef }}
+      appServiceAccountSecretName: "{{ .Values.metrics.serviceAccountRef }}"
+      {{- else }}
+      appServiceAccountSecretName: {{ include "metricsGSAName" . }}
+      {{- end -}}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6 }}
+      {{- end }}
+      {{- $t := default .Values.tolerations .Values.metrics.tolerations }}
+      {{- with $t }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- if .Values.metrics.serviceAccountPath }}
+        {{ $saAnnotation }}: {{ include "tryFileContent.get" (dict "files" $.Files "f" (required "metrics.serviceAccountPath is required!!" .Values.metrics.serviceAccountPath)) | sha256sum }}
+        {{- end -}}
+        {{- $annotations := .Values.metrics.annotations | default dict }}
+        {{- $proxyAnnotations := .Values.metrics.proxyStackdriverExporter.annotations | default dict }}
+        {{- $mergedAnnotations := mergeOverwrite $annotations $proxyAnnotations }}
+        {{- with $mergedAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      {{- if include "fwi.enabled" . }}
+      volumes:
+        - name: fwi-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: {{ .Values.gcp.federatedWorkloadIdentity.audience }}
+                  expirationSeconds: {{ .Values.gcp.federatedWorkloadIdentity.tokenExpiration }}
+                  path: {{ include "fwi.tokenFile" . }}
+      {{- end }}
+      containers:
+      - name: "{{ $sdExporterName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.metrics.sdSidecar "n" "apigee-stackdriver-prometheus-sidecar") }}
+        imagePullPolicy: {{ .Values.metrics.sdSidecar.image.pullPolicy }}
+        {{- with .Values.metrics.proxyStackdriverExporter.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- if include "fwi.enabled" . }}
+        volumeMounts:
+        - name: fwi-token
+          mountPath: {{ include "fwi.tokenPath" . }}
+          readOnly: true
+        {{- end }}
+      - name: "{{ $prometheusProxyName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.metrics.prometheus "n" "apigee-prom-prometheus") }}
+        imagePullPolicy: {{ .Values.metrics.prometheus.image.pullPolicy }}
+        {{- with .Values.metrics.proxyStackdriverExporter.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      - name: "{{ $prometheusAgg }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.metrics.prometheus "n" "apigee-prom-prometheus") }}
+        imagePullPolicy: {{ .Values.metrics.prometheus.image.pullPolicy }}
+        {{- with .Values.metrics.aggregator.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+    {{- end -}}
+    {{- if or .Values.metrics.enabled .Values.customAutoscaling.enabled }}
+    metricsApp:
+      {{- if .Values.gcp.workloadIdentity.enabled }}
+      podServiceAccountName: {{ include "metricsSAName" . }}
+      {{- else }}
+      {{- if .Values.serviceAccountSecretProviderClass }}
+      appServiceAccountSecretProviderClass: {{ .Values.serviceAccountSecretProviderClass }}
+      {{- else if .Values.metrics.serviceAccountRef }}
+      appServiceAccountSecretName: "{{ .Values.metrics.serviceAccountRef }}"
+      {{- else }}
+      appServiceAccountSecretName: {{ include "metricsGSAName" . }}
+      {{- end -}}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6 }}
+      {{- end }}
+      {{- $t := default .Values.tolerations .Values.metrics.tolerations }}
+      {{- with $t }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- if .Values.metrics.serviceAccountPath }}
+        {{ $saAnnotation }}: {{ include "tryFileContent.get" (dict "files" $.Files "f" (required "metrics.serviceAccountPath is required!!" .Values.metrics.serviceAccountPath)) | sha256sum }}
+        {{- end -}}
+        {{- $annotations := .Values.metrics.annotations | default dict }}
+        {{- $appAnnotations := .Values.metrics.appStackdriverExporter.annotations | default dict }}
+        {{- $mergedAnnotations := mergeOverwrite $annotations $appAnnotations }}
+        {{- with $mergedAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      {{- if include "fwi.enabled" . }}
+      volumes:
+        - name: fwi-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: {{ .Values.gcp.federatedWorkloadIdentity.audience }}
+                  expirationSeconds: {{ .Values.gcp.federatedWorkloadIdentity.tokenExpiration }}
+                  path: {{ include "fwi.tokenFile" . }}
+      {{- end }}
+      containers:
+      - name: "{{ $prometheusAppName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.metrics.prometheus "n" "apigee-prom-prometheus") }}
+        imagePullPolicy: {{ .Values.metrics.prometheus.image.pullPolicy }}
+        {{- with .Values.metrics.appStackdriverExporter.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.metrics.prometheus.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.metrics.prometheus.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- if include "fwi.enabled" . }}
+        volumeMounts:
+        - name: fwi-token
+          mountPath: {{ include "fwi.tokenPath" . }}
+          readOnly: true
+        {{- end }}
+      - name: "{{ $sdExporterName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.metrics.sdSidecar "n" "apigee-stackdriver-prometheus-sidecar") }}
+        imagePullPolicy: {{ .Values.metrics.sdSidecar.image.pullPolicy }}
+        {{- with .Values.metrics.appStackdriverExporter.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- if include "fwi.enabled" . }}
+        volumeMounts:
+        - name: fwi-token
+          mountPath: {{ include "fwi.tokenPath" . }}
+          readOnly: true
+        {{- end }}
+    metricsAdapter:
+      podServiceAccountName: "{{ $metricAdapterSA }}"
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6 }}
+      {{- end }}
+      {{- $t := default .Values.tolerations .Values.metrics.tolerations }}
+      {{- with $t }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- if .Values.metrics.serviceAccountPath }}
+        {{ $saAnnotation }}: {{ include "tryFileContent.get" (dict "files" $.Files "f" (required "metrics.serviceAccountPath is required!!" .Values.metrics.serviceAccountPath)) | sha256sum }}
+        {{- end -}}
+        {{- $annotations := .Values.metrics.annotations | default dict }}
+        {{- $adapterAnnotations := .Values.metrics.adapter.annotations | default dict }}
+        {{- $mergedAnnotations := mergeOverwrite $annotations $adapterAnnotations }}
+        {{- with $mergedAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      {{- with .Values.metrics.hostNetwork }}
+      hostNetwork: {{ . }}
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
+      {{- if include "fwi.enabled" . }}
+      volumes:
+        - name: fwi-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: {{ .Values.gcp.federatedWorkloadIdentity.audience }}
+                  expirationSeconds: {{ .Values.gcp.federatedWorkloadIdentity.tokenExpiration }}
+                  path: {{ include "fwi.tokenFile" . }}
+      {{- end }}
+      containers:
+      - name: "{{ $prometheusAdapterName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.metrics.adapter "n" "apigee-prometheus-adapter") }}
+        imagePullPolicy: {{ .Values.metrics.adapter.image.pullPolicy }}
+        {{- with .Values.metrics.adapter.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.metrics.adapter.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end -}}
+        {{- with .Values.metrics.adapter.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end -}}
+        {{- if include "fwi.enabled" . }}
+        volumeMounts:
+        - name: fwi-token
+          mountPath: {{ include "fwi.tokenPath" . }}
+          readOnly: true
+        {{- end }}
+    {{- end -}}
+    {{- if .Values.logger.enabled }}
+    containerLogs:
+      {{- if .Values.gcp.workloadIdentity.enabled }}
+      podServiceAccountName: {{ include "loggerSAName" . }}
+      {{- else }}
+      {{- if .Values.serviceAccountSecretProviderClass }}
+      appServiceAccountSecretProviderClass: {{ .Values.serviceAccountSecretProviderClass }}
+      {{- else if .Values.logger.serviceAccountRef }}
+      appServiceAccountSecretName: "{{ .Values.logger.serviceAccountRef }}"
+      {{- else }}
+      appServiceAccountSecretName: {{ include "loggerGSAName" . }}
+      {{- end -}}
+      {{- end -}}
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.both" . | nindent 6}}
+      {{- end }}
+      {{- $t := default .Values.tolerations .Values.logger.tolerations }}
+      {{- with $t }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- if .Values.logger.serviceAccountPath }}
+        {{ $saAnnotation }}: {{ include "tryFileContent.get" (dict "files" $.Files "f" (required "logger.serviceAccountPath is required!!" .Values.logger.serviceAccountPath)) | sha256sum }}
+        {{- end -}}
+        {{- with .Values.logger.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      configOverride:
+        storage_max_chunks: !!str {{ .Values.logger.storageMaxChunks }}
+        buffer_chunk_size: !!str {{ .Values.logger.bufferChunkSize }}
+        buffer_max_size: !!str {{ .Values.logger.bufferMaxSize }}
+        buffer_memory_limit: !!str {{ .Values.logger.bufferMemoryLimit }}
+        flush: !!str {{ .Values.logger.flushInterval }}
+        workers: !!str {{ .Values.logger.workers }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      {{- with .Values.logger.hostNetwork }}
+      hostNetwork: {{ . }}
+      {{- end }}
+      {{- if include "fwi.enabled" . }}
+      volumes:
+        - name: fwi-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: {{ .Values.gcp.federatedWorkloadIdentity.audience }}
+                  expirationSeconds: {{ .Values.gcp.federatedWorkloadIdentity.tokenExpiration }}
+                  path: {{ include "fwi.tokenFile" . }}
+      {{- end }}
+      containers:
+      - name: "{{ $fluentdLoggerName }}"
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.logger "n" "apigee-fluent-bit") }}
+        imagePullPolicy: {{ .Values.logger.image.pullPolicy }}
+        {{- if and .Values.logger .Values.logger.envVars }}
+        env:
+        {{- range $k, $v := .Values.logger.envVars }}
+        - name: "{{ $k }}"
+          value: "{{ $v }}"
+        {{- end }}
+        {{- end }}
+        {{- with .Values.logger.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.logger.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.logger.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end -}}
+        {{- if include "fwi.enabled" . }}
+        volumeMounts:
+        - name: fwi-token
+          mountPath: {{ include "fwi.tokenPath" . }}
+          readOnly: true
+        {{- end }}
+    {{- end -}}

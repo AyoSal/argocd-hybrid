@@ -1,0 +1,13 @@
+{{- $actionrs := "apigee-cassandra-restore"}}
+{{- $secretKey := "dbbackup_key.json" }}
+{{- if and .Values.cassandra.restore.enabled .Values.cassandra.restore.keyFile }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $actionrs }}-key-file
+  namespace: {{ include "namespace" . }}
+type: Opaque
+data:
+  "key" : |
+    {{ include "tryFileContent.get" (dict "files" $.Files "f"  (required "cassandra.restore.keyFile is required!!"  .Values.cassandra.restore.keyFile)) | b64enc | nindent 4 }}
+{{- end }}

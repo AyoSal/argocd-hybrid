@@ -18,19 +18,19 @@ spec:
             wave: "3"
           - chart: apigee-redis
             valuesFile: values-redis.yaml
-            wave: "3"
+            wave: "4"
           - chart: apigee-ingress-manager
             valuesFile: values-ingress.yaml
-            wave: "4"
+            wave: "5"
           - chart: apigee-org
             valuesFile: values-org.yaml
-            wave: "4"
+            wave: "6"
           - chart: apigee-env
             valuesFile: values-env.yaml
-            wave: "5"
+            wave: "7"
           - chart: apigee-virtualhost
             valuesFile: values-vhost.yaml
-            wave: "6"
+            wave: "8"
   
   template:
     metadata:
@@ -43,7 +43,7 @@ spec:
       source:
         repoURL: https://github.com/AyoSal/argocd-hybrid.git
         targetRevision: temp-fix
-        path: 'apps/apigee-charts/{{chart}}'
+        path: 'apps/1/apigee-charts/{{chart}}'
         helm:
           valueFiles:
             - '{{valuesFile}}'

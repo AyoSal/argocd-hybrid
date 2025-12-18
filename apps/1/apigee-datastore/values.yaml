@@ -1,0 +1,122 @@
+# Default values for apigee-datastore.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+contractProvider: https://apigee.googleapis.com
+namespace: apigee
+apigeeGroupID: 998
+apigeeUserID: 999
+gcp:
+  region: us-central1
+  projectID: ""
+  projectIDRuntime: ""
+  workloadIdentity:
+    enabled: false
+  federatedWorkloadIdentity:
+    enabled: false
+    tokenExpiration: 3600
+nodeSelector:
+  requiredForScheduling: true
+  apigeeRuntime:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-runtime"
+  apigeeData:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-data"
+serviceAccountSecretProviderClass: ""
+#
+# Apigee Cassandra.
+#
+cassandra:
+  # Fields to configure multi-networking, which is supported only for GDCC
+  # (https://cloud.google.com/distributed-cloud-connected) clusters. Cannot be
+  # used for platforms other than GDCC.
+  secondaryNetworkName: ""
+  primaryNetworkName: "default"
+  forceDelete: false
+  auth:
+    default:
+      password: "iloveapis123"
+    admin:
+      username: "admin_user"
+      password: "iloveapis123"
+    ddl:
+      username: "ddl_user"
+      password: "iloveapis123"
+    dml:
+      username: "dml_user"
+      password: "iloveapis123"
+    jmx:
+      username: "jmxuser"
+      password: "iloveapis123"
+    jolokia:
+      username: "jolokiauser"
+      password: "iloveapis123"
+    image:
+      url: "gcr.io/apigee-release/hybrid/apigee-hybrid-cassandra-client"
+      tag: "1.15.1"
+      pullPolicy: IfNotPresent
+  replicaCount: 1
+  terminationGracePeriodSeconds: 300
+  multiRegionSeedHost:
+  port: 9042
+  nodeSelector:
+    key:
+    value:
+  storage:
+    storageClass:
+    storageSize: 10Gi
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-hybrid-cassandra"
+    tag: "1.15.1"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+  maxHeapSize: 512M
+  heapNewSize: 100M
+  clusterName: "apigeecluster"
+  datacenter: "dc-1"
+  rack: "ra-1"
+  backup:
+    enabled: false
+    image:
+      url: "gcr.io/apigee-release/hybrid/apigee-hybrid-cassandra-client"
+      tag: "1.15.1"
+      pullPolicy: IfNotPresent
+    serviceAccountPath:
+    schedule: "0 2 * * *"
+    dbStorageBucket:
+    cloudProvider: "GCP"
+  restore:
+    enabled: false
+    snapshotTimestamp:
+    image:
+      url: "gcr.io/apigee-release/hybrid/apigee-hybrid-cassandra-client"
+      tag: "1.15.1"
+      pullPolicy: IfNotPresent
+    serviceAccountPath:
+    dbStorageBucket:
+    cloudProvider: "GCP"
+  hostNetwork:
+  dnsPolicy:
+#
+# Apigee Cassandra.
+#
+removeDC:
+  tolerations: {}
+# Lets always use the tag so its easy to debug know which change helm is been validated
+# Apigee Guardrails
+guardrails:
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-watcher"
+    tag: "1.15.1"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 500m
+      memory: 64Mi
+# Apigee Operator (just a placeholder)
+ao:
+  certManagerCAIssuerEnabled: false

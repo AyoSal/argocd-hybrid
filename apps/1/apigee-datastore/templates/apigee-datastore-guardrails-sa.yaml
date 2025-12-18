@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: apigee-cassandra-guardrails-sa
+  namespace: {{ include "namespace" . }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade

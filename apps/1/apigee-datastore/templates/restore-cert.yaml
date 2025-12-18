@@ -1,0 +1,22 @@
+{{- $actionrs := "apigee-cassandra-restore"}}
+{{- if .Values.cassandra.restore.enabled }}
+apiVersion:  cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $actionrs }}-tls
+  namespace: {{ include "namespace" . }}
+spec:
+  secretName: {{ $actionrs }}-tls
+  {{/* since the app does not have cert rotation logic therefore 10 yr TTL */}}
+  duration: 87600h
+  issuerRef:
+    name: apigee-ca-issuer
+    kind: ClusterIssuer
+  commonName: {{ $actionrs }}
+  dnsNames:
+  - {{ $actionrs }}
+  - {{ $actionrs }}.{{ include "namespace" . }}
+  - {{ $actionrs }}.{{ include "namespace" . }}.svc.cluster.local
+  usages:
+    - client auth
+{{- end }}

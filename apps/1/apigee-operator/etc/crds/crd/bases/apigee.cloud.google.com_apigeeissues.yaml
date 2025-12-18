@@ -1,0 +1,76 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.13.0
+  name: apigeeissues.apigee.cloud.google.com
+spec:
+  group: apigee.cloud.google.com
+  names:
+    kind: ApigeeIssue
+    listKind: ApigeeIssueList
+    plural: apigeeissues
+    shortNames:
+    - ai
+    singular: apigeeissue
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.severity
+      name: Severity
+      type: string
+    - jsonPath: .spec.reason
+      name: Reason
+      type: string
+    - description: URL to troubleshooting documentation
+      jsonPath: .spec.documentation
+      name: Documentation
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              details:
+                type: string
+              documentation:
+                type: string
+              ignore:
+                type: boolean
+              ignoreReason:
+                maxLength: 100
+                type: string
+              reason:
+                enum:
+                - AIS_VIRTUALHOST_MISSING_ENVGROUP
+                - AIS_CANNOT_CONNECT_TO_CONTROL_PLANE
+                - AIS_PERMISSION_DENIED
+                - AIS_INGRESS_CERT_MISMATCH
+                - AIS_INGRESS_MTLS_CA_CERT_INVALID
+                - AIS_VIRTUALHOST_MISSING_SELECTOR
+                - AIS_INGRESS_MTLS_CA_CERT_EXPIREY
+                - AIS_INGRESS_CERT_EXPIREY
+                - AIS_APIGEE_SERVING_CERT_INVALID
+                type: string
+              severity:
+                enum:
+                - ERROR
+                - WARNING
+                - RECOMMENDED
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources: {}

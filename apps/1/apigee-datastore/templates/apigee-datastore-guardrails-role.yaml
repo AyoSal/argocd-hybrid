@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: apigee-cassandra-guardrails
+  namespace: {{ include "namespace" . }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+rules:
+- apiGroups:
+    - snapshot.storage.k8s.io
+  resources:
+    - volumesnapshots
+  verbs:
+    - list

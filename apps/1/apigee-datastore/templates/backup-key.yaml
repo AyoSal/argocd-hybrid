@@ -1,0 +1,17 @@
+{{- $actionbk := "apigee-cassandra-backup"}}
+{{- if .Values.cassandra.backup.enabled }}
+{{- if not .Values.cassandra.backup.keyFileRef }}
+{{- if .Values.cassandra.backup.keyFile }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $actionbk }}-key-file
+  namespace: {{ include "namespace" . }}
+type: Opaque
+data:
+  "key" : |
+    {{ include "tryFileContent.get" (dict "files" $.Files "f" (required "cassandra.backup.keyFile is required!!"  .Values.cassandra.backup.keyFile)) | b64enc | nindent 4 }}
+---
+{{- end }}
+{{- end }}
+{{- end }}

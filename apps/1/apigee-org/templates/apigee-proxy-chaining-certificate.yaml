@@ -1,0 +1,35 @@
+{{- $values := .Values -}}
+{{- $release := .Release -}}
+{{- $namespace := include "namespace" . }}
+{{- $generatedName := include "orgScopeEncodedName" (dict "name" .Values.org) -}}
+{{- $generatedIngressChainingName := printf "%s-%s-%s" "apigee-ingressgateway" .Values.apigeeChainingGateway.name $generatedName -}}
+{{- if .Values.enhanceProxyLimits }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: "{{ $generatedIngressChainingName }}"
+  namespace: "{{ $namespace }}"
+spec:
+  commonName: {{ $.Values.org }}
+  dnsNames:
+  - {{ $generatedIngressChainingName }}
+  - {{ printf "%s.%s" $generatedIngressChainingName $namespace }}
+  - {{ printf "%s.%s.%s" $generatedIngressChainingName $namespace "svc" }}
+  - {{ printf "%s.%s.%s" $generatedIngressChainingName $namespace "svc.cluster.local" }}
+  duration: 87600h0m0s
+  issuerRef:
+    group: cert-manager.io
+    {{- if .Values.ao.certManagerCAIssuerEnabled }}
+    kind: Issuer
+    {{- else }}
+    kind: ClusterIssuer
+    {{- end }}
+    name: apigee-ca-issuer
+  secretName: {{ $generatedIngressChainingName }}
+  usages:
+  - digital signature
+  - key encipherment
+  - client auth
+  - server auth
+{{- end -}}

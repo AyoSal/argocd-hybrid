@@ -1,0 +1,38 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: apigee-cassandra-restore
+  namespace: {{ include "namespace" . }}
+rules:
+- apiGroups:
+    - ""
+  resources:
+    - pods
+  verbs:
+    - get
+    - list
+    - deletecollection
+- apiGroups:
+    - ""
+  resources:
+    - persistentvolumeclaims
+  verbs:
+    - get
+    - list
+    - create
+- apiGroups:
+    - snapshot.storage.k8s.io
+  resources:
+    - volumesnapshots
+  verbs:
+    - get
+    - list
+- apiGroups:
+    - apigee.cloud.google.com
+  resources:
+    - apigeedatastores
+  verbs:
+    - get
+    - list
+    - delete
+    - create

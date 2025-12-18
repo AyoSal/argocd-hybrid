@@ -1,0 +1,47 @@
+#Override Values for Apigee Datastore | Hybrid 1.10.3 on GKE Cluster deployed with ArgoCD and Helm
+
+gcp:
+  region: us-west1
+  projectID: hybrid-terraform-471100
+
+k8sCluster:
+  region: us-west1 # Must be the closest Google Cloud region to your cluster.
+  name: argo-test
+org: hybrid-terraform-471100
+orgscopedUDCA: true
+instanceID: "argocd1"
+
+imagePullSecrets:
+  - name: gcr-cred
+
+nodeSelector:
+ # This flag determines if the scheduling passes/fails if the labels are missing.
+ requiredForScheduling: false
+ apigeeRuntime:
+   key: "cloud.google.com/gke-nodepool"
+   value: "apigee-runtime"
+ apigeeData:
+   key: "cloud.google.com/gke-nodepool"
+   value: "apigee-data"
+
+cassandra:
+  hostNetwork: false
+  replicaCount: '3'
+  resources:
+    requests:
+      cpu: '4'
+      memory: 7Gi
+  maxHeapSize: 4096M
+  heapNewSize: 600M
+  #backup:
+  #enabled: true
+  #image:
+  #  pullPolicy: Always
+  #serviceAccountPath: "/usr/local/google/home/ayos/july-helm/helm110/aws127/test-sa.json"
+  #cloudProvider: "CSI"
+  #schedule: "*/10 * * * *"  
+    #  auth:
+    # secretProviderClass: apigee-cassandra-auth-spc  # The name of the SecretProviderClass created in spc.yaml.
+
+hub: gcr.io/apigee-release/hybrid
+

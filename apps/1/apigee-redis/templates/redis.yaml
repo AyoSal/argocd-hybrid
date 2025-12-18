@@ -1,0 +1,182 @@
+{{- template "helmVersionCheck" . }}
+{{- template "essLivenessProbeCheck" . }}
+{{- template "essReadinessProbeCheck" . }}
+{{- $name := "default" }}
+{{- $redisName := "apigee-redis" -}}
+{{- $redisEnvoyName := "apigee-redis-envoy" -}}
+apiVersion: apigee.cloud.google.com/v1alpha1
+kind: ApigeeRedis
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "namespace" . }}
+  labels:
+    apigee.cloud.google.com/platform: apigee
+release:
+  forceUpdate: true
+spec:
+  name: {{ $name }}
+  {{- if .Values.redis.auth.secretProviderClass }}
+  credentialSecretProviderClass: {{ .Values.redis.auth.secretProviderClass }}
+  {{- else if .Values.redis.auth.secret }}
+  credentialRef: {{ .Values.redis.auth.secret }}
+  {{- else }}
+  credentialRef: "{{ $redisName }}-{{ $name }}-creds"
+  {{- end -}}
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  components:
+    redis:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.apigeeUserID }}
+        runAsGroup: {{ .Values.apigeeGroupID }}
+        privileged: false
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6 }}
+      {{- end }}
+      {{- $t := default .Values.tolerations .Values.redis.tolerations }}
+      {{- with $t }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.redis.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      {{- with .Values.redis.cwcAppend }}
+      configOverride:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      replicas: {{ .Values.redis.replicaCount }}
+      containers:
+      - name: {{ $redisName }}
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.redis "n" "apigee-redis") }}
+        imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+        {{- if .Values.redis.auth.secretProviderClass }}
+        command:
+        - /bin/sh
+        args:
+        - -c
+        - redis-server /opt/apigee/redis/redis.conf --requirepass $(cat /opt/apigee/external-secrets/redis/redis-password)
+        {{- end }}
+        livenessProbe:
+          {{- if .Values.redis.auth.secretProviderClass }}
+          exec:
+            command:
+            - /app/redis-prober
+            - --action=healthcheck
+            - --skip_tls_verify=true
+            - --password_path=/opt/apigee/external-secrets/redis/redis-password
+          {{- else if .Values.redis.livenessProbe.exec }}
+          exec:
+            {{- with .Values.redis.livenessProbe.exec }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- else }}
+          exec:
+            command:
+            - /app/redis-prober
+            - --action=healthcheck
+            - --skip_tls_verify=true
+          {{- end }}
+          {{- if .Values.redis.livenessProbe.initialDelaySeconds }}
+          initialDelaySeconds: {{ .Values.redis.livenessProbe.initialDelaySeconds }}
+          {{- end }}
+          periodSeconds: {{ .Values.redis.livenessProbe.periodSeconds | default 5 }}
+          timeoutSeconds: {{ .Values.redis.livenessProbe.timeoutSeconds | default 3 }}
+          successThreshold: {{ .Values.redis.livenessProbe.successThreshold | default 1 }}
+          failureThreshold: {{ .Values.redis.livenessProbe.failureThreshold | default 6 }}
+        readinessProbe:
+          {{- if .Values.redis.auth.secretProviderClass }}
+          exec:
+            command:
+            - /app/redis-prober
+            - --action=healthcheck
+            - --skip_tls_verify=true
+            - --password_path=/opt/apigee/external-secrets/redis/redis-password
+          {{- else if .Values.redis.readinessProbe.exec }}
+          exec:
+            {{- with .Values.redis.readinessProbe.exec }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- else }}
+          exec:
+            command:
+            - /app/redis-prober
+            - --action=healthcheck
+            - --skip_tls_verify=true
+          {{- end }}
+          {{- if .Values.redis.readinessProbe.initialDelaySeconds }}
+          initialDelaySeconds: {{ .Values.redis.readinessProbe.initialDelaySeconds }}
+          {{- end }}
+          periodSeconds: {{ .Values.redis.readinessProbe.periodSeconds | default 5 }}
+          timeoutSeconds: {{ .Values.redis.readinessProbe.timeoutSeconds | default 3 }}
+          successThreshold: {{ .Values.redis.readinessProbe.successThreshold | default 1 }}
+          failureThreshold: {{ .Values.redis.readinessProbe.failureThreshold | default 12 }}
+        {{- with .Values.redis.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      lifecycle:
+        postStart:
+          exec:
+            command:
+            - /app/redis-prober
+            - --skip_tls_verify=true
+            {{- if .Values.redis.auth.secretProviderClass }}
+            - --password_path=/opt/apigee/external-secrets/redis/redis-password
+            {{- end }}
+    redisEnvoy:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.apigeeUserID }}
+        runAsGroup: {{ .Values.apigeeGroupID }}
+        privileged: false
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6 }}
+      {{- end }}
+      {{- $t := default .Values.tolerations .Values.redis.envoy.tolerations }}
+      {{- with $t }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.redis.envoy.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      autoScaler:
+        minReplicas: {{ .Values.redis.envoy.replicaCountMin }}
+        maxReplicas: {{ .Values.redis.envoy.replicaCountMax }}
+        metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            targetAverageUtilization: {{ .Values.redis.envoy.targetCPUUtilizationPercentage }}
+            # target:
+              # type: "Utilization"
+              # averageUtilization: {{ .Values.redis.envoy.targetCPUUtilizationPercentage }}
+      {{- with .Values.redis.envoy.cwcAppend }}
+      configOverride:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ $redisEnvoyName }}
+        image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.redis.envoy "n" "apigee-envoy") }}
+        imagePullPolicy: {{ .Values.redis.envoy.image.pullPolicy }}
+        {{- with .Values.redis.envoy.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.redis.envoy.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.redis.envoy.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+---

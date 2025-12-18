@@ -1,0 +1,25 @@
+{{- $name := "guardrails" }}
+apiVersion:  cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: apigee-datastore-guardrails-tls
+  namespace: {{ include "namespace" . }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+spec:
+  secretName: apigee-datastore-guardrails-tls
+  duration: 1h
+  issuerRef:
+    name: apigee-ca-issuer
+    {{- if .Values.ao.certManagerCAIssuerEnabled }}
+    kind: Issuer
+    {{- else }}
+    kind: ClusterIssuer
+    {{- end }}
+  commonName: apigee-datastore-guardrails
+  dnsNames:
+  - apigee-datastore-guardrails
+  - apigee-datastore-guardrails.{{ include "namespace" . }}
+  - apigee-datastore-guardrails.{{ include "namespace" . }}.svc.cluster.local
+  usages:
+    - client auth

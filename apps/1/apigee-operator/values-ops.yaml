@@ -1,0 +1,39 @@
+# Override Values for Apigee Operator | Hybrid 1.10.3 on GKE Cluster deployed with ArgoCD and Helm
+
+gcp:
+  region: us-west1
+  projectID: hybrid-terraform-471100
+
+k8sCluster:
+  name: argocd-test
+  region: us-west1 # Must be the closest Google Cloud region to your cluster.
+  name: argo-test
+  region: us-west1 # Must be the closest Google Cloud region to your cluster.
+org: hybrid-terraform-471100
+orgscopedUDCA: true
+instanceID: "argo1"
+
+imagePullSecrets:
+  - name: gcr-cred
+
+nodeSelector:
+ # This flag determines if the scheduling passes/fails if the labels are missing.
+ requiredForScheduling: false
+ apigeeRuntime:
+   key: "cloud.google.com/gke-nodepool"
+   value: "apigee-runtime"
+ apigeeData:
+   key: "cloud.google.com/gke-nodepool"
+   value: "apigee-data"
+
+hub: gcr.io/apigee-release/hybrid
+metrics:
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"
+  hostNetwork: true
+
+logger:
+  enabled: false
+        # Set to false to disable logger for GKE installations.
+        # Set to true for all platforms other than GKE.
+        # See apigee-logger in Service accounts and roles used by hybrid components.
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"

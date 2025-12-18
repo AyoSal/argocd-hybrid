@@ -1,0 +1,45 @@
+#Override Values for Apigee Ingress Manager | Hybrid 1.10.3 on GKE Cluster deployed with ArgoCD and Helm
+
+gcp:
+  region: us-west1
+  projectID: hybrid-terraform-471100
+
+k8sCluster:
+<<<<<<< HEAD
+  name: argocd1
+  region: us-west1 # Must be the closest Google Cloud region to your cluster.
+org: hybrid-terraform-471100
+orgscopedUDCA: true
+instanceID: "argocd"
+=======
+  name: argocd-test
+  region: us-west1 # Must be the closest Google Cloud region to your cluster.
+org: hybrid-terraform-471100
+orgscopedUDCA: true
+instanceID: "argocd1"
+>>>>>>> 1ed8a88 (changes)
+
+imagePullSecrets:
+  - name: gcr-cred
+
+nodeSelector:
+ # This flag determines if the scheduling passes/fails if the labels are missing.
+ requiredForScheduling: false
+ apigeeRuntime:
+   key: "cloud.google.com/gke-nodepool"
+   value: "apigee-runtime"
+ apigeeData:
+   key: "cloud.google.com/gke-nodepool"
+   value: "apigee-data"
+hub: gcr.io/apigee-release/hybrid
+
+apigeeIngressGateway:
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-asm-ingress"
+    tag: "1.17.2-asm.8-distroless" 
+    pullPolicy: IfNotPresent  
+istiod:
+ replicaCountMax: 4
+ replicaCountMin: 2
+
+   

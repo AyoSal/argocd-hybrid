@@ -1,0 +1,11 @@
+{{- if .Values.gcp.workloadIdentity.enabled }}
+{{- $mintTaskSchedulerName := "apigee-mint-task-scheduler" -}}
+{{- $generatedName := include "orgScopeEncodedName" (dict "name" .Values.org) -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $mintTaskSchedulerName }}-{{ $generatedName }}-sa
+  namespace: {{ include "namespace" . }}
+  annotations:
+    iam.gke.io/gcp-service-account: {{ default .Values.gcp.workloadIdentity.gsa .Values.mintTaskScheduler.gsa }}
+{{- end -}}

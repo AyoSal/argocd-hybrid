@@ -1,0 +1,29 @@
+{{- $values := .Values -}}
+{{- $release := .Release -}}
+{{- $generatedName := include "orgScopeEncodedName" (dict "name" .Values.org) -}}
+{{- $generatedIngressChainingName := printf "%s-%s-%s" "apigee-ingressgateway" .Values.apigeeChainingGateway.name $generatedName -}}
+{{- if .Values.enhanceProxyLimits }}
+apiVersion: apigee.cloud.google.com/v1alpha2
+kind: ApigeeRoute
+metadata:
+  name: "{{ $generatedIngressChainingName }}"
+  namespace: {{ include "namespace" . }}
+spec:
+  enableNonSniClient: true
+  hostnames:
+  - '*'
+  ports:
+  - number: 443
+    protocol: HTTPS
+    tls:
+      credentialName: "{{ $generatedIngressChainingName }}"
+      minProtocolVersion: "{{ .Values.apigeeChainingGateway.minTLSProtocolVersion }}"
+      maxProtocolVersion: "{{ .Values.apigeeChainingGateway.maxTLSProtocolVersion }}"
+      mode: {{ default "SIMPLE" .Values.apigeeChainingGateway.tlsMode }}
+      {{- with .Values.apigeeChainingGateway.cipherSuites }}
+      cipherSuites:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+  selector:
+    ingress_name: "{{ .Values.apigeeChainingGateway.name }}"
+{{- end }}

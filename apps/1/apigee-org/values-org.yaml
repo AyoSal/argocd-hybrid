@@ -1,0 +1,57 @@
+#Override Values for Apigee Org | Hybrid 1.10.3 on GKE Cluster deployed with ArgoCD and Helm
+gcp:
+  region: us-west1
+  projectID: hybrid-terraform-471100
+
+k8sCluster:
+  name: argocd-test
+  region: us-west1 # Must be the closest Google Cloud region to your cluster.
+org: hybrid-terraform-471100
+orgscopedUDCA: true
+instanceID: "argocd"
+
+imagePullSecrets:
+  - name: gcr-cred
+
+nodeSelector:
+ # This flag determines if the scheduling passes/fails if the labels are missing.
+ requiredForScheduling: false
+ apigeeRuntime:
+   key: "cloud.google.com/gke-nodepool"
+   value: "apigee-runtime"
+ apigeeData:
+   key: "cloud.google.com/gke-nodepool"
+   value: "apigee-data"
+hub: gcr.io/apigee-release/hybrid
+
+virtualhosts:
+  - name: argo-grp
+    minTLSProtocolVersion: "1.2"
+    selector:
+      app: apigee-ingressgateway
+      ingress_name: argocd-ingress
+    sslSecret: apigee-tls
+
+ingressGateways:
+  - name: argocd-ingress
+    replicaCountMin: 2
+    replicaCountMax: 4
+    svcType: LoadBalancer
+
+apigeeIngressGateway:
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-asm-ingress"
+    tag: "1.17.2-asm.8-distroless" 
+    pullPolicy: IfNotPresent  
+istiod:
+ replicaCountMax: 2
+ replicaCountMin: 2
+
+watcher:
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"   
+udca:
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"    
+mart:
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"    
+connectAgent:
+  serviceAccountRef: "hybrid-secret-for-serviceaccount"    

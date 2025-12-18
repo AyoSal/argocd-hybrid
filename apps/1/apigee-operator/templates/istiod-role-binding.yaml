@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: apigee-ingressgateway-manager-{{ include "namespace" . }}
+  namespace: {{ include "namespace" . }}
+  labels:
+    apigee.cloud.google.com/platform: apigee
+subjects:
+- kind: ServiceAccount
+  name: apigee-ingressgateway-manager
+  namespace: {{ include "namespace" . }}
+roleRef:
+  kind: Role
+  name: apigee-ingressgateway-manager-{{ include "namespace" . }}
+  apiGroup: rbac.authorization.k8s.io

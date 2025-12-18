@@ -1,0 +1,1298 @@
+{{- template "helmVersionCheck" . }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: apigee-manager
+  namespace: {{ include "namespace" . }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "metricsAdapterName" . }}
+  namespace: {{ include "namespace" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: apigee-leader-election-role
+  namespace: {{ include "namespace" . }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - configmaps/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: apigee-manager-role-{{ include "namespace" . }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumes
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - get
+- apiGroups:
+  - apiregistration.k8s.io
+  resources:
+  - apiservices
+  - apiservices/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+  - get
+  - list
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeetelemetries/finalizers
+  verbs:
+  - get
+  - patch
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: apigee-manager-role
+  namespace: {{ include "namespace" . }}
+rules:
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - roles
+  - rolebindings
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - pods
+  - secrets
+  - serviceaccounts
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  - persistentvolumeclaims
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  - pods
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - resourcequotas
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  - services
+  verbs:
+  - batch
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeedatastores
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeedatastores/finalizers
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeedatastores/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeedeployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeedeployments/finalizers
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeedeployments/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeeenvironments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeeenvironments/finalizers
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeeenvironments/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeeissues
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeeorganizations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeeorganizations/finalizers
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeeorganizations/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeeredis
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeeredis/finalizers
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeeredis/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeerouteconfigs
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeeroutes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeeroutes/finalizers
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeeroutes/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeetelemetries
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeetelemetries/finalizers
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - apigeetelemetries/status
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - cassandradatareplications
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - cassandradatareplications/finalizers
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - cassandradatareplications/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - secretrotations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - secretrotations/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - apigee.cloud.google.com
+  resources:
+  - secretrotations/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  - replicasets
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - certificates
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - certificates
+  - certificates/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - issuers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - list
+  - update
+- apiGroups:
+  - networking.istio.io
+  resources:
+  - destinationrules
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.istio.io
+  resources:
+  - gateways
+  - virtualservices
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - security.istio.io
+  resources:
+  - peerauthentications
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    apigee.cloud.google.com/platform: apigee
+  name: apigee-proxy-role-{{ include "namespace" . }}
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: apigee-leader-election-rolebinding
+  namespace: {{ include "namespace" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: apigee-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: apigee-manager
+  namespace: {{ include "namespace" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    apigee.cloud.google.com/platform: apigee
+  name: apigee-manager-rolebinding-{{ include "namespace" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: apigee-manager-role-{{ include "namespace" . }}
+subjects:
+- kind: ServiceAccount
+  name: apigee-manager
+  namespace: {{ include "namespace" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    apigee.cloud.google.com/platform: apigee
+  name: apigee-manager-rolebinding
+  namespace: {{ include "namespace" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: apigee-manager-role
+subjects:
+- kind: ServiceAccount
+  name: apigee-manager
+  namespace: {{ include "namespace" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    apigee.cloud.google.com/platform: apigee
+  name: apigee-proxy-rolebinding-{{ include "namespace" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: apigee-proxy-role-{{ include "namespace" . }}
+subjects:
+- kind: ServiceAccount
+  name: apigee-manager
+  namespace: {{ include "namespace" . }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    apigee.cloud.google.com/platform: apigee
+    control-plane: controller-manager
+  name: apigee-controller-manager-metrics-service
+  namespace: {{ include "namespace" . }}
+spec:
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: https
+  selector:
+    control-plane: controller-manager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    apigee.cloud.google.com/platform: apigee
+  name: apigee-webhook-service
+  namespace: {{ include "namespace" . }}
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 9443
+  selector:
+    control-plane: controller-manager
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: apigee-serving-cert
+  namespace: {{ include "namespace" . }}
+spec:
+  dnsNames:
+  - apigee-webhook-service.{{ include "namespace" . }}.svc
+  - apigee-webhook-service.{{ include "namespace" . }}.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: apigee-selfsigned-issuer
+  secretName: webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: apigee-selfsigned-issuer
+  namespace: {{ include "namespace" . }}
+spec:
+  selfSigned: {}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: {{ include "namespace" . }}/apigee-serving-cert
+  name: apigee-mutating-webhook-configuration-{{ include "namespace" . }}
+webhooks:
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: apigee-webhook-service
+      namespace: {{ include "namespace" . }}
+      path: /mutate-apigee-cloud-google-com-v1alpha1-apigeedatastore
+  failurePolicy: Fail
+  name: mapigeedatastore.apigee.cloud.google.com
+  rules:
+  - apiGroups:
+    - apigee.cloud.google.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - apigeedatastores
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: apigee-webhook-service
+      namespace: {{ include "namespace" . }}
+      path: /mutate-apigee-cloud-google-com-v1alpha2-apigeeenvironment
+  failurePolicy: Fail
+  name: mapigeeenvironment.apigee.cloud.google.com
+  rules:
+  - apiGroups:
+    - apigee.cloud.google.com
+    apiVersions:
+    - v1alpha2
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - apigeeenvironments
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: apigee-webhook-service
+      namespace: {{ include "namespace" . }}
+      path: /mutate-apigee-cloud-google-com-v1alpha2-apigeeorganization
+  failurePolicy: Fail
+  name: mapigeeorganization.apigee.cloud.google.com
+  rules:
+  - apiGroups:
+    - apigee.cloud.google.com
+    apiVersions:
+    - v1alpha2
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - apigeeorganizations
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: apigee-webhook-service
+      namespace: {{ include "namespace" . }}
+      path: /mutate-apigee-cloud-google-com-v1alpha1-apigeeredis
+  failurePolicy: Fail
+  name: mapigeeredis.apigee.cloud.google.com
+  rules:
+  - apiGroups:
+    - apigee.cloud.google.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - apigeeredis
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: apigee-webhook-service
+      namespace: {{ include "namespace" . }}
+      path: /mutate-apigee-cloud-google-com-v1alpha2-apigeeroute
+  failurePolicy: Fail
+  name: mapigeeroute.apigee.cloud.google.com
+  rules:
+  - apiGroups:
+    - apigee.cloud.google.com
+    apiVersions:
+    - v1alpha2
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - apigeeroutes
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: apigee-webhook-service
+      namespace: {{ include "namespace" . }}
+      path: /mutate-apigee-cloud-google-com-v1alpha2-apigeetelemetry
+  failurePolicy: Fail
+  name: mapigeetelemetry.apigee.cloud.google.com
+  rules:
+  - apiGroups:
+    - apigee.cloud.google.com
+    apiVersions:
+    - v1alpha2
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - apigeetelemetrys
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: apigee-webhook-service
+      namespace: {{ include "namespace" . }}
+      path: /mutate-apigee-cloud-google-com-v1alpha3-apigeedeployment
+  failurePolicy: Fail
+  name: mapigeedeployment.apigee.cloud.google.com
+  rules:
+  - apiGroups:
+    - apigee.cloud.google.com
+    apiVersions:
+    - v1alpha3
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - apigeedeployments
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: {{ include "namespace" . }}/apigee-serving-cert
+  name: apigee-validating-webhook-configuration-{{ include "namespace" . }}
+webhooks:
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: apigee-webhook-service
+      namespace: {{ include "namespace" . }}
+      path: /validate-apigee-cloud-google-com-v1alpha1-apigeedatastore
+  failurePolicy: Fail
+  name: vapigeedatastore.apigee.cloud.google.com
+  rules:
+  - apiGroups:
+    - apigee.cloud.google.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - apigeedatastores
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: apigee-webhook-service
+      namespace: {{ include "namespace" . }}
+      path: /validate-apigee-cloud-google-com-v1alpha2-apigeeenvironment
+  failurePolicy: Fail
+  name: vapigeeenvironment.apigee.cloud.google.com
+  rules:
+  - apiGroups:
+    - apigee.cloud.google.com
+    apiVersions:
+    - v1alpha2
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - apigeeenvironments
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: apigee-webhook-service
+      namespace: {{ include "namespace" . }}
+      path: /validate-apigee-cloud-google-com-v1alpha2-apigeeorganization
+  failurePolicy: Fail
+  name: vapigeeorganization.apigee.cloud.google.com
+  rules:
+  - apiGroups:
+    - apigee.cloud.google.com
+    apiVersions:
+    - v1alpha2
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - apigeeorganizations
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: apigee-webhook-service
+      namespace: {{ include "namespace" . }}
+      path: /validate-apigee-cloud-google-com-v1alpha1-apigeeredis
+  failurePolicy: Fail
+  name: vapigeeredis.apigee.cloud.google.com
+  rules:
+  - apiGroups:
+    - apigee.cloud.google.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - apigeeredis
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: apigee-webhook-service
+      namespace: {{ include "namespace" . }}
+      path: /validate-apigee-cloud-google-com-v1alpha2-apigeeroute
+  failurePolicy: Fail
+  name: vapigeeroute.apigee.cloud.google.com
+  rules:
+  - apiGroups:
+    - apigee.cloud.google.com
+    apiVersions:
+    - v1alpha2
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - apigeeroutes
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: apigee-webhook-service
+      namespace: {{ include "namespace" . }}
+      path: /validate-apigee-cloud-google-com-v1alpha2-apigeetelemetry
+  failurePolicy: Fail
+  name: vapigeetelemetry.apigee.cloud.google.com
+  rules:
+  - apiGroups:
+    - apigee.cloud.google.com
+    apiVersions:
+    - v1alpha2
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - apigeetelemetrys
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: apigee-webhook-service
+      namespace: {{ include "namespace" . }}
+      path: /validate-apigee-cloud-google-com-v1alpha1-secretrotation
+  failurePolicy: Fail
+  name: vsecretrotation.apigee.cloud.google.com
+  rules:
+  - apiGroups:
+    - apigee.cloud.google.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - secretrotations
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: apigee-webhook-service
+      namespace: {{ include "namespace" . }}
+      path: /validate-apigee-cloud-google-com-v1alpha3-apigeedeployment
+  failurePolicy: Fail
+  name: vapigeedeployment.apigee.cloud.google.com
+  rules:
+  - apiGroups:
+    - apigee.cloud.google.com
+    apiVersions:
+    - v1alpha3
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - apigeedeployments
+  sideEffects: None
+---
+# If we are running in an openshift cluster, we should install the appropriate SecurityContextConstraints
+{{ if .Capabilities.APIVersions.Has "security.openshift.io/v1/SecurityContextConstraints" -}}
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: apigee-scc-{{ include "namespace" . }}
+priority: 9
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: false
+readOnlyRootFilesystem: false
+runAsUser:
+  type: MustRunAsRange
+  uidRangeMin: 999
+  uidRangeMax: 999
+seccompProfiles:
+  - runtime/default
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+  - min: 998
+    max: 998
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - min: 998
+    max: 998
+groups:
+- system:serviceaccounts:{{ include "namespace" . }}
+---
+# Cassandra specific scc as it needs other capabilities.
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: apigee-scc-{{ include "namespace" . }}-apigee-datastore
+priority: 9
+allowHostNetwork: true
+allowHostPorts: true
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostPID: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: false
+readOnlyRootFilesystem: false
+allowedCapabilities:
+- 'IPC_LOCK'
+- 'SYS_RESOURCE'
+runAsUser:
+  type: RunAsAny
+seccompProfiles:
+  - runtime/default
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+  - min: 998
+    max: 998
+fsGroup:
+  type: RunAsAny
+users:
+- system:serviceaccount:{{ include "namespace" . }}:apigee-cassandra-default
+---
+# logger specific scc as it needs other capabilities.
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: apigee-scc-{{ include "namespace" . }}-apigee-logger
+priority: 9
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: true
+allowHostDirVolumePlugin: true
+readOnlyRootFilesystem: false
+runAsUser:
+  type: RunAsAny
+seccompProfiles:
+  - runtime/default
+seLinuxContext:
+  type: MustRunAs
+  seLinuxOptions:
+    type: spc_t
+fsGroup:
+  type: RunAsAny
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- hostPath
+- secret
+- csi
+users:
+- system:serviceaccount:{{ include "namespace" . }}:apigee-logger-apigee-telemetry
+---
+{{- end -}}

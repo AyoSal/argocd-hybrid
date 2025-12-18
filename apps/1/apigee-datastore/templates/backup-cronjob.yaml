@@ -1,0 +1,142 @@
+{{- $dsName := "default" }}
+{{- $backup := "apigee-cassandra-backup"}}
+{{- $sshKeyPath := "/var/secrets/keys" }}
+{{- $sshKeyFilename := "key" }}
+
+{{- $csiProvider := "CSI" }}
+{{- $gcsProvider := "GCP" }}
+{{- $sshProvider := "HYBRID" }}
+{{- $supportedProviders := list $csiProvider $gcsProvider $sshProvider }}
+
+{{- if .Values.cassandra.backup.enabled }}
+{{- $clientImg := include "container.image" (dict "hub" .Values.hub "o" .Values.cassandra.backup "n" "apigee-hybrid-cassandra-client") }}
+{{- $provider := default $gcsProvider .Values.cassandra.backup.cloudProvider }}
+{{- if not (has $provider $supportedProviders) }}
+  {{- fail (printf "Detected an unsupported backup provider %q. Please check the \"cassandra.backup.cloudProvider\" field in your overrides file.  Supported providers: %+q" $provider $supportedProviders) }}
+{{- end }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $backup }}
+  namespace: {{ include "namespace" . }}
+spec:
+  schedule: {{ .Values.cassandra.backup.schedule | quote }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.nodeSelector }}
+          affinity:
+            {{- include "nodeAffinity.runtime" . | nindent 12 }}
+          {{- end }}
+          {{- $t := default .Values.tolerations .Values.cassandra.backup.tolerations }}
+          {{- with $t }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: {{ .Values.apigeeUserID }}
+            runAsGroup: {{ .Values.apigeeGroupID }}
+            fsGroup: {{ .Values.apigeeGroupID }}
+          serviceAccountName: {{ $backup }}-sa
+          containers:
+          - name: {{ $backup }}
+            command:
+            - "/opt/apigee/bnr"
+            image: {{ $clientImg | quote }}
+            imagePullPolicy: {{ .Values.cassandra.backup.image.pullPolicy }}
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              privileged: false
+              capabilities:
+                drop:
+                - ALL
+            env:
+            - name: APIGEE_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CASSANDRA_CLUSTER_NAME
+              value: {{ .Values.cassandra.clusterName | quote }}
+            - name: CASSANDRA_DC
+              value: {{ .Values.cassandra.datacenter | quote }}
+              {{/*
+              Possible values:
+              * "CSI" (Preferred). Take CSI VolumeSnapshots of Cassandra
+                PersistentVolumeClaims. Doc: https://kubernetes.io/docs/concepts/storage/volume-snapshots/
+              * "GCP" (Default). Backup data from Cassandra nodes to a Google
+                Cloud Storage bucket.
+              * "HYBRID". Backup data from Cassandra nodes to a remote SSH
+                server.
+              */}}
+            - name: APIGEE_CLOUDPROVIDER
+              value: {{ .Values.cassandra.backup.cloudProvider | quote }}
+              {{/*
+              MODE and ACTION must always be "client" and "backup",
+              respectively, for the backup job.
+              */}}
+            - name: MODE
+              value: "client"
+            - name: ACTION
+              value: "backup"
+            {{- if .Values.cassandra.backup.dbStorageBucket }}
+              {{/*
+              Google Cloud Storage bucket name to which to upload the backup
+              archive. Used only if GCS backup (cloudProvider: "GCP") is set.
+              */}}
+            - name: DBSTORAGE_BUCKET
+              value: {{ .Values.cassandra.backup.dbStorageBucket | quote }}
+            {{- end }}
+            {{- if .Values.cassandra.backup.server }}
+              {{/*
+              IP address or hostname of the SSH server to which the backup
+              archive should be uploaded. Used only if SSH backup
+              (cloudProvider: "HYBRID") is set.
+              */}}
+            - name: BACKUP_SERVER_IP
+              value: {{ .Values.cassandra.backup.server | quote }}
+            {{- end }}
+            {{- if .Values.cassandra.backup.storageDirectory }}
+              {{/*
+              The path to a directory on the SSH server where the resulting
+              backup file will be uploaded. Used only if SSH backup
+              (cloudProvider: "HYBRID") is set.
+              */}}
+            - name: BACKUP_STORAGE_DIR
+              value: {{ .Values.cassandra.backup.storageDirectory | quote }}
+            {{- end }}
+              {{/*
+              Private key to establish SSH connection. Used only if SSH backup
+              (cloudProvider: "HYBRID") is set.
+              */}}
+            - name: BACKUP_KEY_FILE
+              value: "{{ $sshKeyPath }}/{{ $sshKeyFilename }}"
+            volumeMounts:
+            - name: tls-volume
+              mountPath: "/opt/apigee/ssl"
+              readOnly: true
+            - name: "{{ $backup }}-key-file"
+              mountPath: {{ $sshKeyPath | quote }}
+              readOnly: true
+          volumes:
+          - name: {{ $backup }}-key-file
+            secret:
+              defaultMode: 0400
+              {{- if .Values.cassandra.backup.keyFileRef }}
+              secretName: {{ .Values.cassandra.backup.keyFileRef }}
+              {{- else }}
+              secretName: "{{ $backup }}-key-file"
+              {{- end }}
+              optional: true
+          - name: tls-volume
+            secret:
+              secretName: "{{ $backup }}-tls"
+          restartPolicy: OnFailure
+---
+{{- end }}

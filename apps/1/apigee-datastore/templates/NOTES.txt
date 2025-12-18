@@ -1,0 +1,25 @@
+{{- if and .Values.gcp.workloadIdentity .Values.gcp.workloadIdentity.enabled }}
+{{- $namespace := include "namespace" . }}
+  {{- if .Values.cassandra.backup.enabled }}
+  For Cassandra backup GKE Workload Identity, please make sure to add the below membership to the IAM policy binding using the respective kubernetes SA (KSA).
+  gcloud iam service-accounts add-iam-policy-binding {{ default .Values.gcp.workloadIdentity.gsa .Values.cassandra.backup.gsa }} \
+        --role roles/iam.workloadIdentityUser \
+        --member "serviceAccount:{{ .Values.org }}.svc.id.goog[{{ $namespace }}/apigee-cassandra-default]" \
+        --project {{ .Values.org }}
+
+  kubectl annotate serviceaccount apigee-cassandra-default \
+        iam.gke.io/gcp-service-account={{ default .Values.gcp.workloadIdentity.gsa .Values.cassandra.backup.gsa }} \
+        --namespace {{ $namespace }}
+  {{- end }}
+  {{ if .Values.cassandra.restore.enabled }}
+  For Cassandra restore GKE Workload Identity, please make sure to add the below membership to the IAM policy binding using the respective kubernetes SA (KSA).
+  gcloud iam service-accounts add-iam-policy-binding {{ default .Values.gcp.workloadIdentity.gsa .Values.cassandra.restore.gsa }} \
+        --role roles/iam.workloadIdentityUser \
+        --member "serviceAccount:{{ .Values.org }}.svc.id.goog[{{ $namespace }}/apigee-cassandra-default]" \
+        --project {{ .Values.org }}
+
+  kubectl annotate serviceaccount apigee-cassandra-default \
+        iam.gke.io/gcp-service-account={{ default .Values.gcp.workloadIdentity.gsa .Values.cassandra.restore.gsa }} \
+        --namespace {{ $namespace }}
+  {{- end -}}
+{{- end }}

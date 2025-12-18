@@ -1,0 +1,254 @@
+{{- template "helmVersionCheck" . }}
+{{- $dsName := "default" }}
+{{- $removeDC := "apigee-cassandra-remove-dc" }}
+{{- $cassServiceName := include "cassandra.svc" . }}
+{{- $cassImg := include "container.image" (dict "hub" .Values.hub "o" .Values.cassandra "n" "apigee-hybrid-cassandra") }}
+{{- $clientImg := include "container.image" (dict "hub" .Values.hub "o" .Values.cassandra.auth "n" "apigee-hybrid-cassandra-client") }}
+
+{{/*
+Volume name for an External Secret Store for Google Service Accounts (GSA).
+*/}}
+{{- $essGSA := "apigee-external-secrets-gsa" }}
+{{/*
+Use backup GSA by default for the Cassandra Gateway to prevent pod restarts
+if the user enables backup by applying the overrides file.
+*/}}
+{{- $defaultGSA := "apigee-cassandra-backup" }}
+{{- if .Values.cassandra.restore.enabled }}
+  {{- $defaultGSA = "apigee-cassandra-restore" }}
+{{- end }}
+{{/* Path to be used to mount GSA secrets to containers. */}}
+{{- $gsaPath := "/var/secrets/google" }}
+{{- $gsaFilename := "dbbackup_key.json" }}
+{{- if .Values.serviceAccountSecretProviderClass }}
+  {{- $gsaPath = "/opt/apigee/external-secrets/gsa" }}
+  {{- $gsaFilename = "cassandraBackup" }}
+  {{- if .Values.cassandra.restore.enabled }}
+    {{- $gsaFilename = "cassandraRestore" }}
+  {{- end }}
+{{- end }}
+{{- $gsaServiceAccountSecretRef := .Values.cassandra.backup.serviceAccountRef }}
+{{- if .Values.cassandra.restore.enabled }}
+  {{- $gsaServiceAccountSecretRef = .Values.cassandra.restore.serviceAccountRef }}
+{{- end }}
+
+{{/*
+Environment variable name that will be pointing to a GSA used for backup and
+restore purposes. Must have a Storage Object Admin role as per the Apigee
+Hybrid documentation.
+https://cloud.google.com/apigee/docs/hybrid/latest/config-prop-ref
+*/}}
+{{- $gsaEnvVar := "GSA_CREDENTIALS" }}
+
+{{ if .Values.cassandra.secondaryNetworkName }}
+  {{- if not (.Capabilities.APIVersions.Has "networking.gke.io/v1/Network") }}
+    {{ fail "Cluster does not have the \"networking.gke.io/v1/Network\" capability required to use \"cassandra.secondaryNetworkName\"" }}
+  {{ else if not (lookup "networking.gke.io/v1" "Network" "" .Values.cassandra.secondaryNetworkName) }}
+    {{ fail (printf "Unable to find network %q. Please check the \"cassandra.secondaryNetworkName\" field in your overrides file" .Values.cassandra.secondaryNetworkName) }}
+  {{ else if not (lookup "networking.gke.io/v1" "Network" "" .Values.cassandra.primaryNetworkName) }}
+    {{ fail (printf "Unable to find network %q. Please set the \"cassandra.primaryNetworkName\" field in your overrides file to a proper value" .Values.cassandra.primaryNetworkName) }}
+  {{ end }}
+{{- end }}
+
+apiVersion: apigee.cloud.google.com/v1alpha1
+kind: ApigeeDatastore
+metadata:
+  name: {{ $dsName }}
+  namespace: {{ include "namespace" . }}
+  labels:
+    apigee.cloud.google.com/platform: apigee
+    {{/* https://kubernetes.io/docs/reference/labels-annotations-taints/#app-kubernetes-io-version */}}
+    app.kubernetes.io/version: {{ include "hybridVersion" . | quote }}
+spec:
+  forceDelete: {{ .Values.cassandra.forceDelete }}
+  replicas: {{ .Values.cassandra.replicaCount }}
+  {{- if .Values.cassandra.auth.secretProviderClass }}
+  authSecretProviderClass: {{ .Values.cassandra.auth.secretProviderClass | quote }}
+  {{- else if .Values.cassandra.auth.secret }}
+  credentialRef: {{ .Values.cassandra.auth.secret | quote }}
+  {{- else }}
+  credentialRef: "apigee-datastore-{{ $dsName }}-creds"
+  {{- end }}
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if .Values.httpProxy }}
+  httpForwardProxy:
+    scheme: {{ (required "httpProxy.scheme is required. Supported value is http or https." .Values.httpProxy.scheme) | upper }}
+    host: {{ (required "httpProxy.host is required." .Values.httpProxy.host) }}
+    port: {{ .Values.httpProxy.port }}
+    {{- if .Values.httpProxy.username }}
+    username: {{ .Values.httpProxy.username | quote }}
+    {{- end -}}
+    {{- if .Values.httpProxy.password }}
+    password: {{ .Values.httpProxy.password | quote }}
+    {{- end -}}
+  {{- end }}
+  components:
+    removeDc:
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.runtime" . | nindent 6 }}
+      {{- end }}
+      {{- $t := default .Values.tolerations .Values.removeDC.tolerations }}
+      {{- with $t }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.removeDC.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ $removeDC | quote }}
+        image: {{ $clientImg | quote }}
+        imagePullPolicy: {{ .Values.cassandra.auth.image.pullPolicy }}
+    cassandra:
+      securityContext:
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: {{ .Values.apigeeUserID }}
+        runAsGroup: {{ .Values.apigeeGroupID }}
+        privileged: false
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+          - ALL
+      {{- with .Values.nodeSelector }}
+      {{- include "nodeAffinity.data" . | nindent 6 }}
+      {{- end }}
+      {{- $t := default .Values.tolerations .Values.cassandra.tolerations}}
+      {{- with $t }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+        {{- with .Values.cassandra.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if and .Values.cassandra.secondaryNetworkName .Values.cassandra.primaryNetworkName}}
+        networking.gke.io/default-interface: eth0
+        networking.gke.io/interfaces: '[
+            {"interfaceName": "eth0", "network": "{{ .Values.cassandra.primaryNetworkName }}"},
+            {"interfaceName": "net1", "network": "{{ .Values.cassandra.secondaryNetworkName }}"}
+          ]'
+        {{- end }}
+      version: {{ include "validateVersion" (dict "version" .Chart.AppVersion) | quote }}
+      properties:
+        clusterName: {{ .Values.cassandra.clusterName }}
+        {{- if .Values.cassandra.externalSeedHost }}
+        externalSeedHost: {{ .Values.cassandra.externalSeedHost | quote }}
+        {{- end }}
+        {{- if .Values.cassandra.multiRegionSeedHost }}
+        multiRegionSeedHost: {{ .Values.cassandra.multiRegionSeedHost | quote }}
+        {{- end }}
+        datacenter: {{ .Values.cassandra.datacenter | quote }}
+        rack: {{ .Values.cassandra.rack | quote }}
+      {{- if .Values.cassandra.hostNetwork }}
+      hostNetwork: {{ .Values.cassandra.hostNetwork }}
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
+      {{- if .Values.cassandra.storage }}
+      storage:
+        {{-  include "cassandra.storage" (dict "storage" .Values.cassandra.storage ) | nindent 8 }}
+      {{- end }}
+      {{- with .Values.cassandra.cwcAppend }}
+      configOverride:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+      {{- if .Values.serviceAccountSecretProviderClass }}
+      - name: {{ $essGSA }}
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: {{ .Values.serviceAccountSecretProviderClass | quote }}
+      {{- else }}
+      - name: {{ $defaultGSA }}-gsa
+        {{/*
+        This secret must contain a GSA JSON file called dbbackup_key.json.
+        */}}
+        secret:
+          defaultMode: 0644
+          {{- if $gsaServiceAccountSecretRef }}
+          secretName: {{ $gsaServiceAccountSecretRef | quote }}
+          {{- else }}
+          secretName: "{{ $defaultGSA }}-svc-account"
+          {{- end }}
+          optional: true
+      {{- end }}
+      {{- if include "fwi.enabled" . }}
+      - name: fwi-token
+        projected:
+          sources:
+            - serviceAccountToken:
+                audience: {{ .Values.gcp.federatedWorkloadIdentity.audience | quote }}
+                expirationSeconds: {{ .Values.gcp.federatedWorkloadIdentity.tokenExpiration }}
+                path: {{ include "fwi.tokenFile" . | quote }}
+      {{- end }}
+      containers:
+      - name: "apigee-cassandra"
+        image: {{ $cassImg | quote }}
+        imagePullPolicy: {{ .Values.cassandra.image.pullPolicy }}
+        {{- with .Values.cassandra.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.cassandra.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        env:
+        - name: MAX_HEAP_SIZE
+          value: {{ .Values.cassandra.maxHeapSize }}
+        - name: HEAP_NEWSIZE
+          value: {{ .Values.cassandra.heapNewSize }}
+        {{- if include "fwi.enabled" . }}
+        volumeMounts:
+        - name: fwi-token
+          mountPath: {{ include "fwi.tokenPath" . }}
+          readOnly: true
+        {{- end }}
+      {{/*
+      Apigee Cassandra Gateway is responsible for backup and restore operations.
+      It works on top of the Jolokia port, proxying any Jolokia requests to the
+      Cassandra server to minimize the number of ports the pod uses.
+      */}}
+      - name: "apigee-cassandra-gateway"
+        image: {{ $clientImg | quote }}
+        imagePullPolicy: {{ .Values.cassandra.auth.image.pullPolicy }}
+        env:
+        {{/* Path to the GSA that will be used for "GCP" backup/restore. */}}
+        - name: {{ $gsaEnvVar }}
+          value: "{{ $gsaPath }}/{{ $gsaFilename }}"
+        volumeMounts:
+        {{/*
+        GSAs stored in an External Secret Store (ESS) take precedence.
+        Basically, the decision of which GSA to pick is as follows:
+        1. Use the GSA from the ESS (for example, Vault) if it is set in the
+           overrides file.
+        2. Use the GSA defined in the overrides file as the path to the service
+           account JSON file if it's set in the overrides file.
+        3. Try to use Workload Identity (WI) or Workload Identity Federation
+           (WIF) to make requests to the Google API. If neither WI nor WIF is
+           set up, the request will fail with a missing permissions error.
+        */}}
+        {{- if .Values.serviceAccountSecretProviderClass }}
+        - name: {{ $essGSA }}
+          mountPath: {{ $gsaPath | quote }}
+          readOnly: true
+        {{- else }}
+        - name: "{{ $defaultGSA }}-gsa"
+          mountPath: {{ $gsaPath | quote }}
+          readOnly: true
+        {{- end }}
+        {{- if include "fwi.enabled" . }}
+        - name: fwi-token
+          mountPath: {{ include "fwi.tokenPath" . }}
+          readOnly: true
+        {{- end }}
+      initContainers:
+      - name: "apigee-cassandra-ulimit-init"
+        image: {{ $clientImg | quote }}
+        imagePullPolicy: {{ .Values.cassandra.auth.image.pullPolicy }}

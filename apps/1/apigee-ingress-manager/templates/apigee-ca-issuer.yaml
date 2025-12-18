@@ -1,0 +1,9 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    apigee.cloud.google.com/platform: apigee
+  name: apigee-ingress-manager-ca-issuer
+  namespace: {{ include "namespace" . }}
+spec:
+  selfSigned: {}

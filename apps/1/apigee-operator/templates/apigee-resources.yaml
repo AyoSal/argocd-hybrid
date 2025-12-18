@@ -1,0 +1,102 @@
+{{- $apigeeCA := (lookup "v1" "Secret" .Values.certManager.namespace "apigee-ca" ) -}}
+{{/*
+   Honoring the existing ClusterIssuer logic so that the underlying CA does not
+   change to make the migration from the existing `apigeectl` installation to
+   this seamlessly.
+
+   Create the new CluserIssuer with new CA certs if and only if it is not on
+   the top of the existing `apigeectl` installation. If it is a region expansion
+   use case, when the users follow https://cloud.google.com/apigee/docs/hybrid/v1.9/multi-region
+   where they copy the `apigee-ca` k8s secret, which is similar to preserving the CA
+   cert therefore this logic will handle that use case too.
+*/}}
+{{- if empty $apigeeCA -}}
+{{- if .Values.ao.certManagerCAIssuerEnabled }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: apigee-root-certificate-issuer
+  namespace: {{ .Values.certManager.namespace }}
+  labels:
+    apigee.cloud.google.com/platform: apigee
+spec:
+  selfSigned: {}
+{{- else }}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: apigee-root-certificate-issuer
+  labels:
+    apigee.cloud.google.com/platform: apigee
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  selfSigned: {}
+{{- end }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: apigee-ca
+  namespace: {{ .Values.certManager.namespace }}
+  labels:
+    apigee.cloud.google.com/platform: apigee
+  {{- if not .Values.ao.certManagerCAIssuerEnabled }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+spec:
+  isCA: true
+  duration: 87600h # 10 years
+  secretName: apigee-ca
+  commonName: apigee-hybrid
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Never
+  subject:
+    organizations:
+    - cluster.local
+    - apigee
+  issuerRef:
+    group: cert-manager.io
+    {{- if .Values.ao.certManagerCAIssuerEnabled }}
+    kind: Issuer
+    {{- else }}
+    kind: ClusterIssuer
+    {{- end }}
+    name: apigee-root-certificate-issuer # Uses apigee-root-certificate-issuer
+---
+{{- end -}}
+{{- if .Values.ao.certManagerCAIssuerEnabled }}
+################################################################################
+# `apigee-ca-issuer` is the issuer which will be used to issue certificates
+# for Webhooks, CRDs and individual pods
+################################################################################
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: apigee-ca-issuer
+  namespace: {{ .Values.certManager.namespace }}
+  labels:
+    apigee.cloud.google.com/platform: apigee
+spec:
+  ca:
+    secretName: apigee-ca
+{{- else -}}
+################################################################################
+# `apigee-ca-issuer` is the issuer which will be used to issue certificates
+# for Webhooks, CRDs and individual pods
+################################################################################
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: apigee-ca-issuer
+  labels:
+    apigee.cloud.google.com/platform: apigee
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  ca:
+    secretName: apigee-ca
+{{- end -}}

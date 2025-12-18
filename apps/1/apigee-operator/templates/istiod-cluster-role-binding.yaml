@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: apigee-ingressgateway-manager-{{ include "namespace" . }}
+  labels:
+    apigee.cloud.google.com/platform: apigee
+subjects:
+- kind: ServiceAccount
+  name: apigee-ingressgateway-manager
+  namespace: {{ include "namespace" . }}
+roleRef:
+  kind: ClusterRole
+  name: apigee-ingressgateway-manager-{{ include "namespace" . }}
+  apiGroup: rbac.authorization.k8s.io

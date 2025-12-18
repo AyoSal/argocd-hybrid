@@ -1,0 +1,61 @@
+{{- if .Values.gcp.workloadIdentity.enabled }}
+{{- $cassandraUserSetupName := "apigee-cassandra-user-setup" -}}
+{{- $cassandraUserReadinessName := "apigee-cassandra-user-readiness" -}}
+{{- $cassandraSchemaSetupName := "apigee-cassandra-schema-setup" -}}
+{{- $cassandraSchemaValidationName := "apigee-cassandra-schema-val" -}}
+{{- $martName := "apigee-mart" -}}
+{{- $mintTaskSchedulerName := "apigee-mint-task-scheduler" -}}
+{{- $connectAgentName := "apigee-connect-agent" -}}
+{{- $udcaName := "apigee-udca" -}}
+{{- $watcherName := "apigee-watcher" -}}
+{{- $generatedName := include "orgScopeEncodedName" (dict "name" .Values.org) -}}
+  For Apigee Organization GKE Workload Identity, {{ .Values.org }}, please make sure to add the below membership to the IAM policy binding using the respective kubernetes SA (KSA).
+
+  {{ $martKSA := (printf "%s-%s-sa" $martName $generatedName) }}
+  MART KSA: {{ $martKSA }}
+  gcloud iam service-accounts add-iam-policy-binding {{ default .Values.gcp.workloadIdentity.gsa .Values.mart.gsa }} \
+        --role roles/iam.workloadIdentityUser \
+        --member "serviceAccount:{{ .Values.org }}.svc.id.goog[{{ .Values.namespace}}/{{ $martKSA }}]" \
+        --project {{ .Values.org }}
+
+  {{ $connectAgentKSA := (printf "%s-%s-sa" $connectAgentName $generatedName) }}
+  Connect Agent KSA: {{ $connectAgentKSA }}
+  {{/*
+    The intended behavior is for connect agent and mart KSAs to both use the mart GSA.
+    We document in the overrides setup for Hybrid that both should use the mart GSA.
+  */}}
+  gcloud iam service-accounts add-iam-policy-binding {{ default .Values.gcp.workloadIdentity.gsa .Values.mart.gsa }} \
+        --role roles/iam.workloadIdentityUser \
+        --member "serviceAccount:{{ .Values.org }}.svc.id.goog[{{ .Values.namespace}}/{{ $connectAgentKSA }}]" \
+        --project {{ .Values.org }}
+
+  {{ $udcaKSA := (printf "%s-%s-sa" $udcaName $generatedName) }}
+  UDCA KSA: {{ $udcaKSA }}
+  gcloud iam service-accounts add-iam-policy-binding {{ default .Values.gcp.workloadIdentity.gsa .Values.udca.gsa }} \
+        --role roles/iam.workloadIdentityUser \
+        --member "serviceAccount:{{ .Values.org }}.svc.id.goog[{{ .Values.namespace}}/{{ $udcaKSA }}]" \
+        --project {{ .Values.org }}
+
+  {{ $watcherKSA := (printf "%s-%s-sa" $watcherName $generatedName) }}
+  Watcher KSA: {{ $watcherKSA }}
+  gcloud iam service-accounts add-iam-policy-binding {{ default .Values.gcp.workloadIdentity.gsa .Values.watcher.gsa }} \
+        --role roles/iam.workloadIdentityUser \
+        --member "serviceAccount:{{ .Values.org }}.svc.id.goog[{{ .Values.namespace}}/{{ $watcherKSA }}]" \
+        --project {{ .Values.org }}
+
+  {{ $mintKSA := (printf "%s-%s-sa" $mintTaskSchedulerName $generatedName) }}
+  MINT Task Scheduler KSA: {{ $mintKSA }}
+  gcloud iam service-accounts add-iam-policy-binding {{ default .Values.gcp.workloadIdentity.gsa .Values.mintTaskScheduler.gsa }} \
+        --role roles/iam.workloadIdentityUser \
+        --member "serviceAccount:{{ .Values.org }}.svc.id.goog[{{ .Values.namespace}}/{{ $mintKSA }}]" \
+        --project {{ .Values.org }}
+{{- else if and (not .Values.mintTaskScheduler.serviceAccountPath) (not .Values.mintTaskScheduler.serviceAccountRef) (not .Values.serviceAccountSecretProviderClass) -}}
+  WARNING! For Apigee Monetization, a GCP service account is required. Please specify one
+  of the following in your overrides.yaml:
+
+  * `mintTaskScheduler.serviceAccountPath`
+  * `mintTaskScheduler.serviceAccountRef`
+  * `serviceAccountSecretProviderClass`
+
+  See the docs for more information: https://cloud.google.com/apigee/docs/hybrid/latest/monetization-for-hybrid
+{{- end }}

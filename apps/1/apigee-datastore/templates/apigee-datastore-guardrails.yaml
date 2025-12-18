@@ -1,0 +1,174 @@
+{{- $name := "guardrails" }}
+{{- $dsName := "default" }}
+{{- $newVer := semver (include "hybridVersion" .) }}
+{{- $namespace := include "namespace" . }}
+{{- $checkpoint := .Values.checkpoint }}
+{{- if empty $checkpoint }}
+  {{- $ds := (lookup "apigee.cloud.google.com/v1alpha1" "ApigeeDatastore" $namespace $dsName) }}
+  {{- if empty $ds }}
+    {{- $checkpoint = "install" }}
+  {{- else }}
+    {{/*
+    If the Apigee Datastore resource doesn't have a version label, then the
+    "0" version is used for comparison for backward compatibility.
+    */}}
+    {{- $currentVer := semver (default "0" (get (default dict $ds.metadata.labels) "app.kubernetes.io/version")) }}
+    {{- $diff := $newVer | $currentVer.Compare }}
+    {{- if eq $diff -1 }}
+      {{/* The new version is greater than the current version. */}}
+      {{ $checkpoint = "upgrade" }}
+    {{- else if eq $diff 1 }}
+      {{/* The new version is lower than the current version. */}}
+      {{ $checkpoint = "pre-install" }}
+    {{- else }}
+      {{/* The new version equals to the current version. */}}
+      {{ $checkpoint = "config-change" }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{/* Consider backups taken for the last `backupRecent` recent. */}}
+{{- $backupRecent := "24h" }}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: apigee-hybrid-helm-guardrail-datastore
+  namespace: {{ $namespace }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    {{- if and .Values.cassandra.secondaryNetworkName .Values.cassandra.primaryNetworkName}}
+    networking.gke.io/default-interface: eth0
+    networking.gke.io/interfaces: '[
+        {"interfaceName": "eth0", "network": "{{ .Values.cassandra.primaryNetworkName }}"},
+        {"interfaceName": "net1", "network": "{{ .Values.cassandra.secondaryNetworkName }}"}
+      ]'
+    {{- end }}
+    {{- with .Values.cassandra.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  labels:
+    app: apigee-hybrid-helm-guardrail
+spec:
+  hostNetwork: {{ .Values.cassandra.hostNetwork }}
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.nodeSelector }}
+  affinity:
+    {{- include "nodeAffinity.data" . | nindent 4 }}
+  {{- end }}
+  {{- $t := default .Values.tolerations .Values.guardrails.tolerations }}
+  {{- with $t }}
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: {{ .Values.apigeeUserID }}
+    runAsGroup: {{ .Values.apigeeGroupID }}
+  serviceAccountName: apigee-cassandra-guardrails-sa
+  containers:
+    - name: apigee-hybrid-helm-guardrail-container
+      image: {{ include "container.image" (dict "hub" .Values.hub "o" .Values.guardrails "n" "apigee-watcher") }}
+      imagePullPolicy: {{ .Values.guardrails.image.pullPolicy }}
+      command: ['/helmguardrails']
+      env:
+      - name: POD_IP
+        valueFrom:
+          fieldRef:
+            fieldPath: status.podIP
+      - name: COMPONENT
+        value: "datastore"
+      - name: CHECKPOINT
+        value: {{ $checkpoint }}
+      - name: APIGEE_ENDPOINT
+        value: {{ .Values.contractProvider}}
+      - name: DATACENTER
+        value: {{ .Values.cassandra.datacenter }}
+      - name: APIGEE_NAMESPACE
+        value: {{ $namespace | quote }}
+      - name: CASSANDRA_REPLICAS
+        value: {{ .Values.cassandra.replicaCount | quote }}
+      - name: CASSANDRA_STORAGE_SIZE
+        value: {{ default .Values.cassandra.storage.storageSize .Values.cassandra.storage.capacity | quote }}
+      - name: CASSANDRA_BACKUP_ENABLED
+        value: {{ .Values.cassandra.backup.enabled | quote }}
+      {{- if .Values.cassandra.backup.enabled }}
+      - name: CASSANDRA_BACKUP_PROVIDER
+        value: {{ .Values.cassandra.backup.cloudProvider | quote }}
+      - name: CASSANDRA_BACKUP_RECENT
+        value: {{ $backupRecent | quote }}
+      {{- end }}
+      {{- if .Values.cassandra.multiRegionSeedHost }}
+      - name: MULTIREGIONSEEDHOST
+        value: {{ .Values.cassandra.multiRegionSeedHost }}
+      {{- end }}
+      {{- if .Values.cassandra.auth.secretProviderClass }}
+      - name: CASSANDRA_JMX_USERNAME_PATH
+        value: /opt/apigee/externalsecrets/jmxUsername
+      - name: CASSANDRA_JMX_PASSWORD_PATH
+        value: /opt/apigee/externalsecrets/jmxPassword
+      {{- else }}
+      - name: APIGEE_JMX_USER
+        valueFrom:
+          secretKeyRef:
+            {{- if .Values.cassandra.auth.secret }}
+            name: {{ .Values.cassandra.auth.secret }}
+            {{- else }}
+            name: apigee-datastore-{{ $name }}-creds
+            {{- end }}
+            key: jmx.user
+      - name: APIGEE_JMX_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            {{- if .Values.cassandra.auth.secret }}
+            name: {{ .Values.cassandra.auth.secret }}
+            {{- else }}
+            name: apigee-datastore-{{ $name }}-creds
+            {{- end }}
+            key: jmx.password
+      {{- end }}
+      {{- if .Values.httpProxy }}
+      {{- if .Values.httpProxy.username }}
+      - name: {{ lower .Values.httpProxy.scheme }}_proxy
+        value: {{ lower .Values.httpProxy.scheme }}://{{ quote .Values.httpProxy.username }}:{{ quote .Values.httpProxy.password }}@{{ .Values.httpProxy.host }}:{{ .Values.httpProxy.port }}
+      {{- else }}
+      - name: {{ lower .Values.httpProxy.scheme }}_proxy
+        value: {{ lower .Values.httpProxy.scheme }}://{{ .Values.httpProxy.host }}:{{ .Values.httpProxy.port }}
+      {{- end }}
+      {{- end }}
+      volumeMounts:
+      - name: tls-volume
+        readOnly: true
+        mountPath: /opt/apigee/ssl
+      {{- if .Values.cassandra.auth.secretProviderClass }}
+      - name: apigee-external-secrets
+        mountPath: /opt/apigee/externalsecrets
+        readOnly: true
+      {{- end }}
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+          - ALL
+      {{- with .Values.guardrails.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  volumes:
+  - name: tls-volume
+    secret:
+      secretName: "apigee-datastore-guardrails-tls"
+  {{- if .Values.cassandra.auth.secretProviderClass }}
+  - name: apigee-external-secrets
+    csi:
+      driver: secrets-store.csi.k8s.io
+      readOnly: true
+      volumeAttributes:
+        secretProviderClass: {{ .Values.cassandra.auth.secretProviderClass }}
+  {{- end }}
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0

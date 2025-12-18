@@ -1,0 +1,32 @@
+{{- template "helmVersionCheck" . }}
+{{- if .Values.org }}
+{{- $values := .Values -}}
+{{- $files := .Files -}}
+{{- $release := .Release -}}
+{{- range $index, $vh := $values.virtualhosts }}
+{{- if eq $vh.name (required "given $vh.name is not part of virtualhosts in the overrides yaml" $values.envgroup) -}}
+{{- $certName := printf "%s-%s" $values.org $vh.name }}
+{{- if not $vh.sslSecret }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: "{{ $certName }}"
+  namespace: {{ include "namespace"  (dict "release" $release "values" $values) }}
+type: Opaque
+data:
+  cert: |-
+    {{- $c := include "tryFileContent.get" (dict "files" $files "f" (required "$vh.sslCertPath is required!!" $vh.sslCertPath)) }}
+    {{- $c | b64enc | nindent 4 }}
+  key: |-
+    {{- $k := include "tryFileContent.get" (dict "files" $files "f" (required "$vh.sslKeyPath is required!!" $vh.sslKeyPath)) }}
+    {{- $k | b64enc | nindent 4 }}
+  {{- with $vh.caCertPath }}
+  cacert: |-
+    {{- $ca := include "tryFileContent.get" (dict "files" $files "f" (required "$vh.caCertPath is required!!"  $vh.caCertPath)) }}
+    {{- $ca | b64enc | nindent 4 }}
+  {{- end }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

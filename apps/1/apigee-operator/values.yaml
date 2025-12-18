@@ -1,0 +1,86 @@
+# Default values for apigee-operator.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+contractProvider: https://apigee.googleapis.com
+org: ""
+gcp:
+  region: us-central1
+  projectID: ""
+  projectIDRuntime: ""
+  workloadIdentity:
+    enabled: false
+namespace: apigee
+#
+# Cert Manager
+#
+certManager:
+  namespace: cert-manager
+apigeeGroupID: 998
+apigeeUserID: 999
+nodeSelector:
+  requiredForScheduling: true
+  apigeeRuntime:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-runtime"
+  apigeeData:
+    key: "cloud.google.com/gke-nodepool"
+    value: "apigee-data"
+imagePullSecrets: []
+# Lets always use the tag so its easy to debug know which change helm is been validated
+# Apigee Operators controller
+ao:
+  certManagerCAIssuerEnabled: false
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-operators"
+    tag: "1.15.1"
+    pullPolicy: Always
+  hostNetwork: false
+  args:
+    loglevel: info
+    enableWebhooks: true
+    enableControllers: true
+    enableAPIClient: true
+    disableFluentdSizeLimit: false
+    disableManagedClusterRoles: true
+    disableSAProjection: true
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1024Mi
+    requests:
+      cpu: 400m
+      memory: 512Mi
+cassandra:
+  auth:
+    secretProviderClass: ""
+redis:
+  auth:
+    secretProviderClass: ""
+# kube rbac proxy
+kubeRBACProxy:
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-kube-rbac-proxy"
+    tag: "1.15.1"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 500m
+      memory: 128Mi
+    requests:
+      cpu: 5m
+      memory: 64Mi
+# Lets always use the tag so its easy to debug know which change helm is been validated
+# Apigee Guardrails
+guardrails:
+  image:
+    url: "gcr.io/apigee-release/hybrid/apigee-watcher"
+    tag: "1.15.1"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 500m
+      memory: 64Mi
+serviceAccountSecretProviderClass: ""
+metrics:
+  serviceAccountPath:

@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apigee-istio-mesh-config
+  namespace: {{ include "namespace" . }}
+  labels:
+    apigee.cloud.google.com/platform: apigee
+data:
+  mesh: |-
+    accessLogEncoding: 1
+    accessLogFile: {{ .Values.istiod.accessLogFile }}
+    accessLogFormat: '{{ .Values.istiod.accessLogFormat }}'
+    defaultConfig:
+      terminationDrainDuration: 300s
+      concurrency: 2
+      discoveryAddress: apigee-ingressgateway-manager.{{ include "namespace" . }}.svc:15012
+      drainDuration: 45s
+      parentShutdownDuration: 1m0s
+      proxyAdminPort: 15000
+      serviceCluster: istio-proxy
+      {{- with .Values.istiod.forwardClientCertDetails }}
+      gatewayTopology:
+        forwardClientCertDetails: {{ . }}
+      {{- end }}
+      tracing:
+        zipkin:
+          address: zipkin.{{ include "namespace" . }}:9411
+    defaultProviders:
+      metrics:
+      - prometheus
+    disableMixerHttpReports: true
+    disablePolicyChecks: true
+    enableAutoMtls: false
+    enablePrometheusMerge: false
+    ingressClass: istio
+    ingressControllerMode: DEFAULT
+    ingressService: apigee-ingressgateway
+    localityLbSetting:
+      enabled: false
+    protocolDetectionTimeout: 0s
+    reportBatchMaxEntries: 100
+    reportBatchMaxTime: 1s
+    sdsUdsPath: unix:/etc/istio/proxy/SDS
+    rootNamespace: apigee
+    trustDomain: cluster.local
+  meshNetworks: 'networks: {}'

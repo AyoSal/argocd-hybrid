@@ -1,0 +1,35 @@
+{{- $runtimeName := "apigee-runtime" -}}
+{{- $synchronizerName := "apigee-synchronizer" -}}
+{{- $udcaName := "apigee-udca" -}}
+{{- $values := .Values -}}
+{{- range $i, $env := .Values.envs -}}
+{{- if eq $env.name  $values.env -}}
+{{- $generatedName := include "envScopeEncodedName" (dict "org" $values.org "env" $env.name) -}}
+{{- if $values.org -}}
+{{- if $values.gcp.workloadIdentity.enabled }}
+  For Apigee Environment GKE Workload Identity, {{ $env.name }}, please make sure to add the below membership to the IAM policy binding using the respective kubernetes SA (KSA).
+
+  {{ $runtimeKSA := (printf "%s-%s-sa" $runtimeName $generatedName) }}
+  Runtime KSA: {{ $runtimeKSA }}
+  gcloud iam service-accounts add-iam-policy-binding {{ include "getRuntimeGSA" (dict "value" $values.gcp.workloadIdentity.gsa  "env" $env) }} \
+        --role roles/iam.workloadIdentityUser \
+        --member "serviceAccount:{{ $values.org }}.svc.id.goog[{{ $values.namespace}}/{{ $runtimeKSA }}]" \
+        --project {{ $values.org }}
+
+  {{ $syncKSA := (printf "%s-%s-sa" $synchronizerName $generatedName) }}
+  Synchronizer KSA: {{ $syncKSA }}
+  gcloud iam service-accounts add-iam-policy-binding {{ include "getSynchronizerGSA" (dict "value" $values.gcp.workloadIdentity.gsa  "env" $env) }} \
+        --role roles/iam.workloadIdentityUser \
+        --member "serviceAccount:{{ $values.org }}.svc.id.goog[{{ $values.namespace}}/{{ $syncKSA }}]" \
+        --project {{ $values.org }}
+
+  {{ $udcaKSA := (printf "%s-%s-sa" $udcaName $generatedName) }}
+  UDCA KSA: {{ $udcaKSA }}:
+  gcloud iam service-accounts add-iam-policy-binding {{ include "getUdcaGSA" (dict "value" $values.gcp.workloadIdentity.gsa  "env" $env) }} \
+        --role roles/iam.workloadIdentityUser \
+        --member "serviceAccount:{{ $values.org }}.svc.id.goog[{{ $values.namespace}}/{{ $udcaKSA }}]" \
+        --project {{ $values.org }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,53 @@
+{{- template "targetVirtualhostCheck" . }}
+{{- if .Values.org }}
+{{- $values := .Values -}}
+{{- $files := .Files -}}
+{{- $release := .Release -}}
+{{- range $index, $vh := $values.virtualhosts }}
+{{- if eq $vh.name (required "given $vh.name is not part of virtualhosts in the overrides yaml" $values.envgroup) -}}
+{{- $certName := printf "%s-%s" $values.org $vh.name }}
+{{- $generatedName := include "orgScopeEncodedName" (dict "name" $values.org) -}}
+{{- $generatedIngressChainingName := printf "%s-%s-%s" "apigee-ingressgateway" $values.apigeeChainingGateway.name $generatedName -}}
+apiVersion: apigee.cloud.google.com/v1alpha1
+kind: ApigeeRouteConfig
+metadata:
+  name: {{ $values.org }}-{{ $vh.name }}
+  namespace: {{ include "namespace"  (dict "release" $release "values" $values) }}
+spec:
+  selector:
+  {{- if $vh.selector -}}
+    {{- toYaml $vh.selector | nindent 4 }}
+  {{- else }}
+    app: istio-ingressgateway
+  {{- end -}}
+  {{- if or $values.enhanceProxyLimits $vh.additionalGateways }}
+  additionalGateways:
+  {{- if $values.enhanceProxyLimits }}
+  - "{{ $generatedIngressChainingName }}"
+  {{- end}}
+  {{- range $i, $gw := $vh.additionalGateways }}
+  - "{{ $gw }}"
+  {{- end }}
+  {{- end }}
+  connectTimeout: {{ default 300 $vh.connectTimeout }}
+  {{- if $vh.requestTimeout }}
+  requestTimeout:
+    {{ $vh.requestTimeout }}
+  {{- end }}
+  tls:
+    mode: {{ default "SIMPLE" $vh.tlsMode }}
+    secretNameRef: {{ default $certName $vh.sslSecret }}
+    {{- include "validateTLSProtocols" . }}
+    {{- with $vh.minTLSProtocolVersion }}
+    minProtocolVersion: {{ include "toIstioTLSProtocolVersion" (dict "s" $vh.minTLSProtocolVersion) }}
+    {{- end }}
+    {{- with $vh.maxTLSProtocolVersion }}
+    maxProtocolVersion: {{ include "toIstioTLSProtocolVersion" (dict "s" $vh.maxTLSProtocolVersion) }}
+    {{- end }}
+    {{- with $vh.cipherSuites }}
+    cipherSuites:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
