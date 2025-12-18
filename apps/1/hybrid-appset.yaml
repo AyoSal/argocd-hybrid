@@ -43,7 +43,7 @@ spec:
       source:
         repoURL: https://github.com/AyoSal/argocd-hybrid.git
         targetRevision: temp-fix
-        path: 'apps/1/apigee-charts/{{chart}}'
+        path: 'apps/1/{{chart}}'
         helm:
           valueFiles:
             - '{{valuesFile}}'
