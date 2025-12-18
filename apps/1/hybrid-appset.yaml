@@ -51,9 +51,9 @@ spec:
             - '{{valuesFile}}'
           parameters:
             - name: "env"
-              value: '{{envName}}'  
+              value: '{{env}}'  
             - name: "envgroup"
-              value: '{{envgroupName}}'   
+              value: '{{envgroup}}'   
       destination:
         server: https://kubernetes.default.svc
         namespace: 'apigee'
