@@ -17,7 +17,26 @@ spec:
             wave: "2"
             env: "none"
             envgroup: "none"
-          # ... repeat for others ...
+          - chart: apigee-telemetry
+            valuesFile: values-telemetry.yaml
+            wave: "3"
+            env: "none"
+            envgroup: "none"
+          - chart: apigee-redis
+            valuesFile: values-redis.yaml
+            wave: "4"
+            env: "none"
+            envgroup: "none"
+          - chart: apigee-ingress-manager
+            valuesFile: values-ingress.yaml
+            wave: "5"
+            env: "none"
+            envgroup: "none"
+          - chart: apigee-org
+            valuesFile: values-org.yaml
+            wave: "6"
+            env: "none"
+            envgroup: "none"  
           - chart: apigee-env
             valuesFile: values-env.yaml
             wave: "7"
