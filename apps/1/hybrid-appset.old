@@ -10,29 +10,35 @@ spec:
           - chart: apigee-operator
             valuesFile: values-ops.yaml
             wave: "1"
-            env: "none" # Defaulting to "none" or "" prevents the Helm error
-            envgroup: "none"
           - chart: apigee-datastore
             valuesFile: values-ds.yaml
             wave: "2"
-            env: "none"
-            envgroup: "none"
-          # ... repeat for others ...
+          - chart: apigee-telemetry
+            valuesFile: values-telemetry.yaml
+            wave: "3"
+          - chart: apigee-redis
+            valuesFile: values-redis.yaml
+            wave: "4"
+          - chart: apigee-ingress-manager
+            valuesFile: values-ingress.yaml
+            wave: "5"
+          - chart: apigee-org
+            valuesFile: values-org.yaml
+            wave: "6"
           - chart: apigee-env
             valuesFile: values-env.yaml
             wave: "7"
-            env: "argo-env"
-            envgroup: "none"
+            env: "argo-env"  #Apigee Environment Name
           - chart: apigee-virtualhost
             valuesFile: values-vhost.yaml
             wave: "8"
-            env: "none"
             envgroup: "argo-grp"
   
   template:
     metadata:
       name: '{{chart}}'
       annotations:
+        # This controls the sequence. Lower numbers run first.
         argocd.argoproj.io/sync-wave: '{{wave}}'
     spec:
       project: default
@@ -43,7 +49,6 @@ spec:
         helm:
           valueFiles:
             - '{{valuesFile}}'
-          # Use skipBuildParameters or ensure values exist in all generator elements
           parameters:
             - name: "env"
               value: '{{env}}'  
@@ -59,4 +64,3 @@ spec:
         syncOptions:
         - CreateNamespace=true
         - ServerSideApply=true
-        - SkipDryRunOnMissingResource=true # Recommended for Apigee CRDs
